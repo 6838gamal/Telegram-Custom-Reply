@@ -3,10 +3,10 @@
     "api_hash": "debec87745352ef7c5fdcae9622930a1",
     "keywords": [
         "ابى مختص",
+"help",
+"Specialist",
         "ابي مدرس",
         "ابى مدرس",
-"help",
-"I need help",
         "ابى خصوصي",
         "من يعرف خصوصي",
         "عندي واجب",
@@ -18,6 +18,7 @@
         {"id": -4936931871, "reply_type": "group"},
         {"id": -1002718581472, "reply_type": "group"}
     ],
-    "group_reply_template": "تفضل خاص، أبشر {user}!",
+    "group_reply_template_ar": "تفضل خاص، أبشر {user}!",
+    "group_reply_template_en": "Here you go, {user}! I'm ready to help you!",
     "log_file": "help_requests.json"
 }
