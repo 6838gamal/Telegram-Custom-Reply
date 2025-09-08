@@ -1,0 +1,21 @@
+{
+    "api_id": 20200731,
+    "api_hash": "debec87745352ef7c5fdcae9622930a1",
+    "keywords": [
+        "ابى مختص",
+        "ابي مدرس",
+        "ابى مدرس",
+        "ابى خصوصي",
+        "من يعرف خصوصي",
+        "عندي واجب",
+        "يسوي بحث",
+        "احد يعرف خصوصي انقليزي؟"
+    ],
+    "allowed_groups": [
+        {"id": -1001234567890, "reply_type": "private"},
+        {"id": -1007657765567, "reply_type": "group"},
+        {"id": -1002718581472, "reply_type": "group"}
+    ],
+    "group_reply_template": "تفضل خاص، أبشر {user}!",
+    "log_file": "help_requests.json"
+}
