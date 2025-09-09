@@ -5,7 +5,7 @@ from flask import Flask, request, render_template_string
 from pyrogram import Client, filters
 
 # 📌 تحميل وحفظ الإعدادات
-CONFIG_FILE = "config.json"
+CONFIG_FILE = "config1.json"
 def load_config():
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
