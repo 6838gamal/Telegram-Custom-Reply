@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>لوحة التحكم</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <h1>لوحة تحكم البوت</h1>
+    <p class="status">الحالة: {{ status }}</p>
+
+    <!-- الكلمات المفتاحية -->
+    <div class="card">
+        <h2>الكلمات المفتاحية</h2>
+
+        <form method="post" action="/update_keywords">
+            {% for kw in keywords %}
+            <div class="row">
+                <input type="text" name="keywords" value="{{ kw }}">
+                <button type="submit" name="delete" value="{{ kw }}" class="btn danger">حذف</button>
+            </div>
+            {% endfor %}
+
+            <div class="actions">
+                <button type="submit" name="add" value="1" class="btn info">➕ إضافة</button>
+                <button type="submit" class="btn success">💾 حفظ</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- المجموعات -->
+    <div class="card">
+        <h2>المجموعات</h2>
+
+        <form method="post" action="/update_groups">
+            {% for g in groups %}
+            <div class="row">
+                <input type="text" name="group_ids" value="{{ g.id }}">
+                
+                <select name="group_types">
+                    <option value="group" {% if g.reply_type=="group" %}selected{% endif %}>Group</option>
+                    <option value="private" {% if g.reply_type=="private" %}selected{% endif %}>Private</option>
+                </select>
+
+                <button type="submit" name="delete" value="{{ g.id }}" class="btn danger">حذف</button>
+            </div>
+            {% endfor %}
+
+            <div class="actions">
+                <button type="submit" name="add" value="1" class="btn info">➕ إضافة</button>
+                <button type="submit" class="btn success">💾 حفظ</button>
+            </div>
+        </form>
+    </div>
+
+</div>
+
+</body>
+  </html>
+                      
