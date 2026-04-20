@@ -9,3 +9,4 @@ uvicorn
 pyrogram
 tgcrypto
 jinja2
+python-multipart
