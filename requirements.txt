@@ -22,3 +22,14 @@ streamlit
 telegram
 tgcrypto
 uvicorn
+fastapi
+flask
+itsdangerous
+jinja2
+PyJWT
+pyrogram
+python-multipart
+streamlit
+telegram
+tgcrypto
+uvicorn

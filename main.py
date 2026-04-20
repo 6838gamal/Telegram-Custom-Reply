@@ -1,4 +1,5 @@
 import os
+import secrets
 import asyncio
 import json
 from datetime import datetime, timedelta
@@ -22,7 +23,7 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key")
+SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
 EXPIRE_MINUTES = 120
 MAX_ITEMS = 10
 serializer = URLSafeTimedSerializer(SECRET_KEY, salt="telegram-control-center")
@@ -137,7 +138,11 @@ def login_response(request: Request, step: str, error: str | None = None, succes
     )
 
 
-def dashboard_redirect():
+def is_https_request(request: Request):
+    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+
+
+def dashboard_redirect(request: Request):
     token = create_token()
     response = RedirectResponse(with_notice("/", "success", "You are signed in successfully."), status_code=303)
     response.set_cookie(
@@ -145,6 +150,7 @@ def dashboard_redirect():
         token,
         httponly=True,
         samesite="lax",
+        secure=is_https_request(request),
         max_age=EXPIRE_MINUTES * 60
     )
     return response
@@ -242,7 +248,7 @@ async def verify(request: Request, code: str = Form(...)):
         )
 
         await ensure_telegram_initialized()
-        return dashboard_redirect()
+        return dashboard_redirect(request)
     except SessionPasswordNeeded:
         return login_response(request, "password", "This account requires a two-step verification password.")
     except PhoneCodeInvalid:
@@ -266,7 +272,7 @@ async def verify_password(request: Request, password: str = Form(...)):
         await ensure_telegram_connected()
         await telegram.check_password(clean_password)
         await ensure_telegram_initialized()
-        return dashboard_redirect()
+        return dashboard_redirect(request)
     except FloodWait as error:
         return login_response(request, "password", f"Telegram rate limit reached. Try again in {error.value} seconds.")
     except Exception as error:
@@ -315,7 +321,9 @@ async def dashboard(request: Request):
 
 
 @app.get("/load_chats")
-async def load_chats():
+async def load_chats(request: Request):
+    verify_token(request)
+
     try:
         await ensure_telegram_initialized()
         chats = []
@@ -344,8 +352,9 @@ async def load_chats():
 
 
 @app.post("/keywords")
-async def save_keywords(keywords_form: list[str] = Form(default=[], alias="keywords")):
+async def save_keywords(request: Request, keywords_form: list[str] = Form(default=[], alias="keywords")):
     global keywords
+    verify_token(request)
 
     cleaned = []
     for keyword in keywords_form:
@@ -358,7 +367,9 @@ async def save_keywords(keywords_form: list[str] = Form(default=[], alias="keywo
 
 
 @app.post("/save_chats")
-async def save_chats(selected_chats: list[str] = Form(default=[])):
+async def save_chats(request: Request, selected_chats: list[str] = Form(default=[])):
+    verify_token(request)
+
     groups = []
     privates = []
     skipped = 0
@@ -385,8 +396,9 @@ async def save_chats(selected_chats: list[str] = Form(default=[])):
 
 
 @app.post("/broadcast")
-async def broadcast(message: str = Form(...)):
+async def broadcast(request: Request, message: str = Form(...)):
     global broadcast_message
+    verify_token(request)
 
     broadcast_message = message.strip()
     if not broadcast_message:

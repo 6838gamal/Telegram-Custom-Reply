@@ -6,7 +6,13 @@ Python FastAPI web dashboard for Telegram custom auto-replies. The main app is s
 ## Runtime
 - Development workflow runs `uvicorn main:app --host 0.0.0.0 --port 5000`.
 - Production deployment is configured to run the same FastAPI app with Uvicorn.
-- Telegram functionality uses Pyrogram and requires `API_ID` and `API_HASH` environment variables, with `config.json` as a legacy fallback.
+- Telegram functionality uses Pyrogram and requires `API_ID` and `API_HASH` environment variables. `config.json` remains only as a legacy fallback and no longer stores credential values.
+
+## Security Notes
+- Dashboard actions that read Telegram chats, save rules, save chat targets, or broadcast messages require the signed-in cookie.
+- Session cookies are HTTP-only, same-site, and marked secure when served over HTTPS.
+- `SECRET_KEY` should be provided as an environment variable for stable login sessions across restarts; otherwise the app generates a process-local key.
+- Python virtual-package folders, Telegram session files, bytecode caches, and `.env` files are ignored by Git.
 
 ## Notes
 - The root route redirects unauthenticated users to `/login`.
