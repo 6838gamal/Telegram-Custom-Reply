@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 from pyrogram import Client, filters
 
 # ------------------------------
-# إعداد التطبيق
+# APP SETUP
 # ------------------------------
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -17,12 +17,14 @@ templates = Jinja2Templates(directory="templates")
 CONFIG_FILE = "config.json"
 bot_status = "⏳ Starting..."
 
+MAX_ITEMS = 10
+
 # ------------------------------
-# تحميل الإعدادات
+# CONFIG
 # ------------------------------
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        raise FileNotFoundError("config.json not found")
+        raise FileNotFoundError("config.json missing")
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -32,8 +34,13 @@ def save_config():
 
 config = load_config()
 
+config.setdefault("keywords", [])
+config.setdefault("allowed_groups", [])
+config.setdefault("private_chats", [])
+config.setdefault("broadcast_message", "Hello!")
+
 # ------------------------------
-# Telegram Client
+# TELEGRAM CLIENT
 # ------------------------------
 telegram = Client(
     "my_account",
@@ -42,43 +49,34 @@ telegram = Client(
     in_memory=True
 )
 
-auth_sessions = {}
+auth = {}
 is_authenticated = False
 
 # ------------------------------
-# Telegram Logic
+# MESSAGE HANDLER
 # ------------------------------
-def match_keyword(text: str):
-    for kw in config.get("keywords", []):
-        if kw.lower() in text:
-            return kw
-    return None
+def match_keyword(text):
+    for k in config["keywords"]:
+        if k.lower() in text:
+            return True
+    return False
 
 
-@telegram.on_message(filters.text & filters.group)
-async def handler(client, message):
+@telegram.on_message(filters.text)
+async def handler(_, message):
     if not message.text:
         return
 
-    keyword = match_keyword(message.text.lower())
+    if not match_keyword(message.text.lower()):
+        return
 
-    if keyword:
-        template = config.get(
-            "group_reply_template_ar",
-            "✅ Message captured from {user}"
-        )
-
-        reply = template.format(
-            user=message.from_user.mention if message.from_user else "User"
-        )
-
-        await message.reply(reply)
+    await message.reply("✅ Auto Reply Activated")
 
 # ------------------------------
-# Login Routes
+# LOGIN
 # ------------------------------
 @app.get("/login")
-async def login_page(request: Request):
+async def login(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="login.html",
@@ -91,8 +89,8 @@ async def send_code(request: Request, phone: str = Form(...)):
     await telegram.connect()
     sent = await telegram.send_code(phone)
 
-    auth_sessions["phone"] = phone
-    auth_sessions["phone_code_hash"] = sent.phone_code_hash
+    auth["phone"] = phone
+    auth["hash"] = sent.phone_code_hash
 
     return templates.TemplateResponse(
         request=request,
@@ -101,107 +99,113 @@ async def send_code(request: Request, phone: str = Form(...)):
     )
 
 
-@app.post("/verify_code")
-async def verify_code(request: Request, code: str = Form(...)):
+@app.post("/verify")
+async def verify(request: Request, code: str = Form(...)):
     global is_authenticated, bot_status
 
-    try:
-        await telegram.sign_in(
-            phone_number=auth_sessions["phone"],
-            phone_code_hash=auth_sessions["phone_code_hash"],
-            phone_code=code
-        )
+    await telegram.sign_in(
+        auth["phone"],
+        auth["hash"],
+        code
+    )
 
-        is_authenticated = True
-        bot_status = "✅ Running"
+    is_authenticated = True
+    bot_status = "✅ Running"
 
-        async def run_bot():
-            await telegram.idle()
+    asyncio.create_task(telegram.idle())
 
-        asyncio.create_task(run_bot())
-
-        return RedirectResponse("/", status_code=303)
-
-    except Exception:
-        return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context={
-                "step": "code",
-                "error": "Invalid code, try again"
-            }
-        )
+    return RedirectResponse("/", status_code=303)
 
 # ------------------------------
-# Dashboard
+# DASHBOARD PROTECTION
 # ------------------------------
 @app.get("/")
-async def index(request: Request):
+async def dashboard(request: Request):
     if not is_authenticated:
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse("/login")
 
     return templates.TemplateResponse(
         request=request,
         name="index.html",
         context={
             "status": bot_status,
-            "keywords": config.get("keywords", []),
-            "groups": config.get("allowed_groups", [])
+            "keywords": config["keywords"]
         }
     )
 
+# ------------------------------
+# LOAD TELEGRAM CHATS
+# ------------------------------
+@app.get("/load_chats")
+async def load_chats():
+    chats = []
 
-@app.post("/update_keywords")
-async def update_keywords(
-    keywords: list[str] = Form(default=[]),
-    delete: str = Form(default=None),
-    add: str = Form(default=None)
-):
-    if delete:
-        config["keywords"] = [w for w in config.get("keywords", []) if w != delete]
+    async for d in telegram.get_dialogs():
+        c = d.chat
 
-    elif add:
-        config.setdefault("keywords", []).append("New keyword")
-
-    else:
-        config["keywords"] = [k.strip() for k in keywords if k.strip()]
-
-    save_config()
-    return RedirectResponse("/", status_code=303)
-
-
-@app.post("/update_groups")
-async def update_groups(
-    group_ids: list[str] = Form(default=[]),
-    group_types: list[str] = Form(default=[]),
-    delete: str = Form(default=None),
-    add: str = Form(default=None)
-):
-    if delete:
-        gid = int(delete)
-        config["allowed_groups"] = [
-            g for g in config.get("allowed_groups", [])
-            if g["id"] != gid
-        ]
-
-    elif add:
-        config.setdefault("allowed_groups", []).append({
-            "id": 0,
-            "reply_type": "group"
+        chats.append({
+            "id": c.id,
+            "name": c.title or c.first_name or "Unknown",
+            "type": str(c.type)
         })
 
-    else:
-        cleaned = []
-        for i in range(len(group_ids)):
-            try:
-                cleaned.append({
-                    "id": int(group_ids[i]),
-                    "reply_type": group_types[i]
-                })
-            except:
-                continue
+        if len(chats) >= 50:
+            break
 
-        config["allowed_groups"] = cleaned
+    return {"chats": chats}
+
+# ------------------------------
+# SAVE SELECTED CHATS
+# ------------------------------
+@app.post("/save_chats")
+async def save_chats(selected: list[str] = Form(...)):
+    groups = []
+    privates = []
+
+    for cid in selected[:MAX_ITEMS]:
+        cid = int(cid)
+
+        if cid < 0:
+            groups.append({"id": cid})
+        else:
+            privates.append(cid)
+
+    config["allowed_groups"] = groups
+    config["private_chats"] = privates
 
     save_config()
+
     return RedirectResponse("/", status_code=303)
+
+# ------------------------------
+# KEYWORDS
+# ------------------------------
+@app.post("/keywords")
+async def keywords(keywords: list[str] = Form(default=[])):
+    config["keywords"] = [k.strip() for k in keywords if k.strip()][:MAX_ITEMS]
+    save_config()
+    return RedirectResponse("/", status_code=303)
+
+# ------------------------------
+# BROADCAST
+# ------------------------------
+@app.post("/broadcast")
+async def broadcast():
+    msg = config["broadcast_message"]
+
+    chats = config["allowed_groups"] + [{"id": x} for x in config["private_chats"]]
+
+    for c in chats[:MAX_ITEMS]:
+        try:
+            await telegram.send_message(c["id"], msg)
+        except:
+            pass
+
+    return RedirectResponse("/", status_code=303)
+
+# ------------------------------
+# STARTUP
+# ------------------------------
+@app.on_event("startup")
+async def start():
+    pass
