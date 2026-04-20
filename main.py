@@ -4,12 +4,17 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 from pyrogram import Client, filters
 
 # ------------------------------
-# APP
+# APP SETUP
 # ------------------------------
 app = FastAPI()
+
+# 🔥 مهم جداً لتخزين تسجيل الدخول
+app.add_middleware(SessionMiddleware, secret_key="super-secret-key")
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -17,23 +22,23 @@ bot_status = "⏳ Starting..."
 MAX_ITEMS = 10
 
 # ------------------------------
-# ENV CONFIG (NO CONFIG FILE)
+# ENV CONFIG ONLY
 # ------------------------------
 API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 
 if not API_ID or not API_HASH:
-    raise Exception("❌ API_ID and API_HASH must be set in environment variables")
+    raise Exception("API_ID and API_HASH are required")
 
 API_ID = int(API_ID)
 
 # ------------------------------
-# IN-MEMORY DATA
+# MEMORY STORAGE
 # ------------------------------
 keywords = []
 allowed_groups = []
 private_chats = []
-broadcast_message = "Hello from bot!"
+broadcast_message = "Hello"
 
 # ------------------------------
 # TELEGRAM CLIENT
@@ -46,16 +51,12 @@ telegram = Client(
 )
 
 auth = {}
-is_authenticated = False
 
 # ------------------------------
 # KEYWORD MATCH
 # ------------------------------
 def match_keyword(text: str):
-    for k in keywords:
-        if k.lower() in text:
-            return True
-    return False
+    return any(k.lower() in text for k in keywords)
 
 # ------------------------------
 # MESSAGE HANDLER
@@ -68,7 +69,7 @@ async def handler(_, message):
     if not match_keyword(message.text.lower()):
         return
 
-    await message.reply("✅ Auto Response Triggered")
+    await message.reply("✅ Auto Reply Triggered")
 
 # ------------------------------
 # LOGIN PAGE
@@ -100,12 +101,10 @@ async def send_code(request: Request, phone: str = Form(...)):
     )
 
 # ------------------------------
-# VERIFY CODE
+# VERIFY CODE (FIXED)
 # ------------------------------
 @app.post("/verify")
 async def verify(request: Request, code: str = Form(...)):
-    global is_authenticated, bot_status
-
     try:
         await telegram.sign_in(
             auth["phone"],
@@ -113,10 +112,13 @@ async def verify(request: Request, code: str = Form(...)):
             code
         )
 
-        is_authenticated = True
-        bot_status = "✅ Running"
+        # 🔥 SESSION FIX (IMPORTANT)
+        request.session["auth"] = True
 
-        asyncio.create_task(telegram.idle())
+        async def run_bot():
+            await telegram.idle()
+
+        asyncio.create_task(run_bot())
 
         return RedirectResponse("/", status_code=303)
 
@@ -128,11 +130,13 @@ async def verify(request: Request, code: str = Form(...)):
         )
 
 # ------------------------------
-# DASHBOARD
+# DASHBOARD (FIXED)
 # ------------------------------
 @app.get("/")
 async def dashboard(request: Request):
-    if not is_authenticated:
+
+    # 🔥 SESSION CHECK (FIX)
+    if not request.session.get("auth"):
         return RedirectResponse("/login")
 
     return templates.TemplateResponse(
@@ -148,7 +152,7 @@ async def dashboard(request: Request):
     )
 
 # ------------------------------
-# LOAD CHATS FROM TELEGRAM
+# LOAD CHATS
 # ------------------------------
 @app.get("/load_chats")
 async def load_chats():
@@ -159,7 +163,7 @@ async def load_chats():
 
         chats.append({
             "id": chat.id,
-            "name": chat.title or chat.first_name or "Private Chat",
+            "name": chat.title or chat.first_name or "Private",
             "type": str(chat.type)
         })
 
@@ -169,7 +173,7 @@ async def load_chats():
     return {"chats": chats}
 
 # ------------------------------
-# SAVE SELECTED CHATS
+# SAVE CHATS
 # ------------------------------
 @app.post("/save_chats")
 async def save_chats(selected: list[str] = Form(...)):
@@ -192,7 +196,7 @@ async def save_chats(selected: list[str] = Form(...)):
     return RedirectResponse("/", status_code=303)
 
 # ------------------------------
-# KEYWORDS UPDATE
+# KEYWORDS
 # ------------------------------
 @app.post("/keywords")
 async def update_keywords(keywords_form: list[str] = Form(default=[])):
@@ -203,7 +207,7 @@ async def update_keywords(keywords_form: list[str] = Form(default=[])):
     return RedirectResponse("/", status_code=303)
 
 # ------------------------------
-# BROADCAST MESSAGE
+# BROADCAST
 # ------------------------------
 @app.post("/broadcast")
 async def broadcast(message: str = Form(...)):
