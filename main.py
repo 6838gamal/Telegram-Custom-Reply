@@ -1,5 +1,6 @@
 import os
 import asyncio
+import json
 import jwt
 from datetime import datetime, timedelta
 
@@ -44,8 +45,18 @@ def verify_token(request: Request):
 # =========================
 # ENV
 # =========================
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
+def load_config():
+    try:
+        with open("config.json", "r", encoding="utf-8") as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+config = load_config()
+api_id_value = os.getenv("API_ID") or config.get("api_id")
+API_ID = int(api_id_value) if api_id_value else None
+API_HASH = os.getenv("API_HASH") or config.get("api_hash")
+TELEGRAM_READY = bool(API_ID and API_HASH)
 
 # =========================
 # DATA
@@ -61,12 +72,22 @@ MAX_ITEMS = 10
 # =========================
 # TELEGRAM
 # =========================
-telegram = Client(
-    "my_account",
-    api_id=API_ID,
-    api_hash=API_HASH,
-    in_memory=True
-)
+telegram = None
+
+if TELEGRAM_READY:
+    telegram = Client(
+        "my_account",
+        api_id=API_ID,
+        api_hash=API_HASH,
+        in_memory=True
+    )
+
+def telegram_required():
+    if telegram is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Telegram API credentials are not configured."
+        )
 
 # =========================
 # KEYWORD MATCH
@@ -77,34 +98,35 @@ def match_keyword(text: str):
 # =========================
 # AUTO REPLY ENGINE
 # =========================
-@telegram.on_message(filters.text)
-async def handler(_, message):
-    if not message.text:
-        return
+if telegram is not None:
+    @telegram.on_message(filters.text)
+    async def handler(_, message):
+        if not message.text:
+            return
 
-    if not match_keyword(message.text.lower()):
-        return
+        if not match_keyword(message.text.lower()):
+            return
 
-    chat_id = message.chat.id
+        chat_id = message.chat.id
 
-    reply_type = "default"
+        reply_type = "default"
 
-    for g in chat_settings["groups"]:
-        if g["id"] == chat_id:
-            reply_type = "group"
+        for g in chat_settings["groups"]:
+            if g["id"] == chat_id:
+                reply_type = "group"
 
-    for p in chat_settings["private"]:
-        if p["id"] == chat_id:
-            reply_type = "private"
+        for p in chat_settings["private"]:
+            if p["id"] == chat_id:
+                reply_type = "private"
 
-    if reply_type == "group":
-        await message.reply("📢 Group Auto Reply")
+        if reply_type == "group":
+            await message.reply("📢 Group Auto Reply")
 
-    elif reply_type == "private":
-        await message.reply("💬 Private Auto Reply")
+        elif reply_type == "private":
+            await message.reply("💬 Private Auto Reply")
 
-    else:
-        await message.reply("✅ Default Reply")
+        else:
+            await message.reply("✅ Default Reply")
 
 # =========================
 # LOGIN
@@ -114,11 +136,26 @@ async def login(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="login.html",
-        context={"step": "phone"}
+        context={
+            "step": "phone",
+            "telegram_ready": TELEGRAM_READY
+        }
     )
 
 @app.post("/send_code")
 async def send_code(request: Request, phone: str = Form(...)):
+    if telegram is None:
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={
+                "step": "phone",
+                "telegram_ready": False,
+                "error": "Telegram API credentials are not configured."
+            },
+            status_code=503
+        )
+
     await telegram.connect()
 
     sent = await telegram.send_code(phone)
@@ -129,11 +166,16 @@ async def send_code(request: Request, phone: str = Form(...)):
     return templates.TemplateResponse(
         request=request,
         name="login.html",
-        context={"step": "code"}
+        context={
+            "step": "code",
+            "telegram_ready": TELEGRAM_READY
+        }
     )
 
 @app.post("/verify")
 async def verify(request: Request, code: str = Form(...)):
+    telegram_required()
+
     try:
         await telegram.sign_in(
             auth_data["phone"],
@@ -154,7 +196,11 @@ async def verify(request: Request, code: str = Form(...)):
         return templates.TemplateResponse(
             request=request,
             name="login.html",
-            context={"step": "code", "error": str(e)}
+            context={
+                "step": "code",
+                "telegram_ready": TELEGRAM_READY,
+                "error": str(e)
+            }
         )
 
 # =========================
@@ -162,7 +208,10 @@ async def verify(request: Request, code: str = Form(...)):
 # =========================
 @app.get("/")
 async def dashboard(request: Request):
-    verify_token(request)
+    try:
+        verify_token(request)
+    except HTTPException:
+        return RedirectResponse("/login", status_code=303)
 
     return templates.TemplateResponse(
         request=request,
@@ -179,6 +228,8 @@ async def dashboard(request: Request):
 # =========================
 @app.get("/load_chats")
 async def load_chats():
+    telegram_required()
+
     chats = []
 
     async for d in telegram.get_dialogs():
@@ -199,7 +250,7 @@ async def load_chats():
 # KEYWORDS CRUD
 # =========================
 @app.post("/keywords")
-async def save_keywords(keywords_form: list[str] = Form(default=[])):
+async def save_keywords(keywords_form: list[str] = Form(default=[], alias="keywords")):
     global keywords
 
     keywords = [k.strip() for k in keywords_form if k.strip()][:MAX_ITEMS]
@@ -238,6 +289,8 @@ async def save_chats(
 # =========================
 @app.post("/broadcast")
 async def broadcast(message: str = Form(...)):
+    telegram_required()
+
     global broadcast_message
 
     broadcast_message = message

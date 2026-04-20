@@ -11,6 +11,14 @@
 
 <h2>Telegram Login</h2>
 
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+
+{% if not telegram_ready %}
+<p class="error">Telegram API credentials are not configured. Add API_ID and API_HASH to enable login and auto-replies.</p>
+{% endif %}
+
 {% if step == "phone" %}
 <form method="post" action="/send_code">
 <input name="phone" placeholder="Phone">
