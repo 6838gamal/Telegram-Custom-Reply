@@ -1,52 +1,51 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
 <title>Dashboard</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
-<div class="container">
+<div class="layout">
 
-<h1>Telegram Bot Dashboard</h1>
-<p>Status: {{ status }}</p>
+<!-- LEFT -->
+<div class="left">
 
-<!-- KEYWORDS -->
-<div class="card">
 <h2>Keywords</h2>
 
 <form method="post" action="/keywords">
 {% for k in keywords %}
 <input name="keywords" value="{{ k }}">
 {% endfor %}
-
-<button class="btn">Save</button>
+<button>Save</button>
 </form>
-</div>
 
-<!-- CHAT SELECTOR -->
-<div class="card">
+<hr>
 
-<h2>Telegram Chats</h2>
+<h2>Load Chats</h2>
 
-<button onclick="loadChats()" class="btn">Load Chats</button>
+<button onclick="loadChats()">Load Telegram Chats</button>
 
 <form method="post" action="/save_chats">
 <div id="chatBox"></div>
-<button class="btn">Save Chats</button>
+<div id="typeBox"></div>
+<div id="replyBox"></div>
+
+<button>Save Chats</button>
 </form>
 
 </div>
 
-<!-- BROADCAST -->
-<div class="card">
+<!-- RIGHT -->
+<div class="right">
+
+<h2>Saved Chats</h2>
+<div id="savedChats"></div>
 
 <h2>Broadcast</h2>
-
 <form method="post" action="/broadcast">
 <textarea name="message">{{ broadcast_message }}</textarea>
-<button class="btn">Send</button>
+<button>Send</button>
 </form>
 
 </div>
@@ -54,6 +53,7 @@
 </div>
 
 <script>
+
 async function loadChats(){
     const res = await fetch("/load_chats");
     const data = await res.json();
@@ -65,10 +65,17 @@ async function loadChats(){
         box.innerHTML += `
         <div>
             <input type="checkbox" name="selected" value="${c.id}">
-            ${c.name} (${c.type})
+            <input name="types" value="${c.type}">
+            <select name="reply_types">
+                <option value="group">Group Reply</option>
+                <option value="private">Private Reply</option>
+                <option value="default">Default</option>
+            </select>
+            ${c.name}
         </div>`;
     });
 }
+
 </script>
 
 </body>
