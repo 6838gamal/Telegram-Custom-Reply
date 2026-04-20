@@ -15,14 +15,14 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 CONFIG_FILE = "config.json"
-bot_status = "⏳ جاري التشغيل"
+bot_status = "⏳ Starting..."
 
 # ------------------------------
-# تحميل / حفظ الإعدادات
+# تحميل الإعدادات
 # ------------------------------
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        raise FileNotFoundError("config.json غير موجود")
+        raise FileNotFoundError("config.json not found")
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -38,8 +38,12 @@ config = load_config()
 telegram = Client(
     "my_account",
     api_id=config["api_id"],
-    api_hash=config["api_hash"]
+    api_hash=config["api_hash"],
+    in_memory=True
 )
+
+auth_sessions = {}
+is_authenticated = False
 
 # ------------------------------
 # Telegram Logic
@@ -61,20 +65,81 @@ async def handler(client, message):
     if keyword:
         template = config.get(
             "group_reply_template_ar",
-            "✅ تم التقاط الرسالة من {user}"
+            "✅ Message captured from {user}"
         )
 
         reply = template.format(
-            user=message.from_user.mention if message.from_user else "مستخدم"
+            user=message.from_user.mention if message.from_user else "User"
         )
 
         await message.reply(reply)
 
 # ------------------------------
-# Routes
+# Login Routes
+# ------------------------------
+@app.get("/login")
+async def login_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={"step": "phone"}
+    )
+
+
+@app.post("/send_code")
+async def send_code(request: Request, phone: str = Form(...)):
+    await telegram.connect()
+    sent = await telegram.send_code(phone)
+
+    auth_sessions["phone"] = phone
+    auth_sessions["phone_code_hash"] = sent.phone_code_hash
+
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={"step": "code"}
+    )
+
+
+@app.post("/verify_code")
+async def verify_code(request: Request, code: str = Form(...)):
+    global is_authenticated, bot_status
+
+    try:
+        await telegram.sign_in(
+            phone_number=auth_sessions["phone"],
+            phone_code_hash=auth_sessions["phone_code_hash"],
+            phone_code=code
+        )
+
+        is_authenticated = True
+        bot_status = "✅ Running"
+
+        async def run_bot():
+            await telegram.idle()
+
+        asyncio.create_task(run_bot())
+
+        return RedirectResponse("/", status_code=303)
+
+    except Exception:
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={
+                "step": "code",
+                "error": "Invalid code, try again"
+            }
+        )
+
+# ------------------------------
+# Dashboard
 # ------------------------------
 @app.get("/")
 async def index(request: Request):
+    if not is_authenticated:
+        return RedirectResponse("/login", status_code=303)
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -96,7 +161,7 @@ async def update_keywords(
         config["keywords"] = [w for w in config.get("keywords", []) if w != delete]
 
     elif add:
-        config.setdefault("keywords", []).append("كلمة جديدة")
+        config.setdefault("keywords", []).append("New keyword")
 
     else:
         config["keywords"] = [k.strip() for k in keywords if k.strip()]
@@ -129,9 +194,10 @@ async def update_groups(
         cleaned = []
         for i in range(len(group_ids)):
             try:
-                gid = int(group_ids[i])
-                gtype = group_types[i]
-                cleaned.append({"id": gid, "reply_type": gtype})
+                cleaned.append({
+                    "id": int(group_ids[i]),
+                    "reply_type": group_types[i]
+                })
             except:
                 continue
 
@@ -139,17 +205,3 @@ async def update_groups(
 
     save_config()
     return RedirectResponse("/", status_code=303)
-
-# ------------------------------
-# Startup Event
-# ------------------------------
-@app.on_event("startup")
-async def startup_event():
-    global bot_status
-
-    async def run_bot():
-        await telegram.start()
-        bot_status = "✅ شغال"
-        await telegram.idle()
-
-    asyncio.create_task(run_bot())
