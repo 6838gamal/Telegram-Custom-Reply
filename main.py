@@ -75,12 +75,15 @@ async def handler(client, message):
 # ------------------------------
 @app.get("/")
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "status": bot_status,
-        "keywords": config.get("keywords", []),
-        "groups": config.get("allowed_groups", [])
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={
+            "status": bot_status,
+            "keywords": config.get("keywords", []),
+            "groups": config.get("allowed_groups", [])
+        }
+    )
 
 
 @app.post("/update_keywords")
