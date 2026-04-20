@@ -8,19 +8,24 @@ from starlette.middleware.sessions import SessionMiddleware
 from pyrogram import Client, filters
 
 # ------------------------------
-# APP
+# APP SETUP
 # ------------------------------
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="super-secret-key")
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key="super-secret-key"
+)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 MAX_ITEMS = 10
+
 bot_status = "⏳ Starting..."
 
 # ------------------------------
-# ENV ONLY
+# ENV CONFIG
 # ------------------------------
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
@@ -31,8 +36,8 @@ API_HASH = os.getenv("API_HASH")
 keywords = []
 
 chat_settings = {
-    "groups": [],     # {"id": -100, "reply_type": "group"}
-    "private": []     # {"id": 123, "reply_type": "private"}
+    "groups": [],
+    "private": []
 }
 
 broadcast_message = "Hello from bot"
@@ -50,13 +55,13 @@ telegram = Client(
 )
 
 # ------------------------------
-# KEYWORD CHECK
+# KEYWORD MATCH
 # ------------------------------
 def match_keyword(text: str):
     return any(k.lower() in text for k in keywords)
 
 # ------------------------------
-# AUTO REPLY LOGIC
+# AUTO REPLY
 # ------------------------------
 @telegram.on_message(filters.text)
 async def handler(_, message):
@@ -68,7 +73,6 @@ async def handler(_, message):
 
     chat_id = message.chat.id
 
-    # default reply
     reply_type = "default"
 
     for g in chat_settings["groups"]:
@@ -80,24 +84,28 @@ async def handler(_, message):
             reply_type = p.get("reply_type", "private")
 
     if reply_type == "group":
-        await message.reply("📢 Group Auto Reply")
+        await message.reply("📢 Group Reply")
 
     elif reply_type == "private":
-        await message.reply("💬 Private Auto Reply")
+        await message.reply("💬 Private Reply")
 
     else:
         await message.reply("✅ Default Reply")
 
 # ------------------------------
-# LOGIN
+# LOGIN PAGE
 # ------------------------------
 @app.get("/login")
 async def login(request: Request):
     return templates.TemplateResponse(
-        "login.html",
-        {"request": request, "step": "phone"}
+        request=request,
+        name="login.html",
+        context={"step": "phone"}
     )
 
+# ------------------------------
+# SEND CODE
+# ------------------------------
 @app.post("/send_code")
 async def send_code(request: Request, phone: str = Form(...)):
     await telegram.connect()
@@ -108,10 +116,14 @@ async def send_code(request: Request, phone: str = Form(...)):
     auth["hash"] = sent.phone_code_hash
 
     return templates.TemplateResponse(
-        "login.html",
-        {"request": request, "step": "code"}
+        request=request,
+        name="login.html",
+        context={"step": "code"}
     )
 
+# ------------------------------
+# VERIFY CODE
+# ------------------------------
 @app.post("/verify")
 async def verify(request: Request, code: str = Form(...)):
     try:
@@ -128,12 +140,13 @@ async def verify(request: Request, code: str = Form(...)):
 
     except Exception as e:
         return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "step": "code", "error": str(e)}
+            request=request,
+            name="login.html",
+            context={"step": "code", "error": str(e)}
         )
 
 # ------------------------------
-# DASHBOARD
+# DASHBOARD (ingest.html)
 # ------------------------------
 @app.get("/")
 async def dashboard(request: Request):
@@ -141,9 +154,9 @@ async def dashboard(request: Request):
         return RedirectResponse("/login")
 
     return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
+        request=request,
+        name="index.html",
+        context={
             "status": bot_status,
             "keywords": keywords,
             "chat_settings": chat_settings,
@@ -158,13 +171,13 @@ async def dashboard(request: Request):
 async def load_chats():
     chats = []
 
-    async for d in telegram.get_dialogs():
-        c = d.chat
+    async for dialog in telegram.get_dialogs():
+        chat = dialog.chat
 
         chats.append({
-            "id": c.id,
-            "name": c.title or c.first_name or "Private",
-            "type": str(c.type)
+            "id": chat.id,
+            "name": chat.title or chat.first_name or "Private",
+            "type": str(chat.type)
         })
 
         if len(chats) >= 50:
@@ -173,7 +186,7 @@ async def load_chats():
     return {"chats": chats}
 
 # ------------------------------
-# SAVE CHATS WITH TYPE + RULE
+# SAVE CHATS
 # ------------------------------
 @app.post("/save_chats")
 async def save_chats(
@@ -185,15 +198,17 @@ async def save_chats(
     groups = []
     privates = []
 
-    for i in range(len(selected[:MAX_ITEMS])):
+    for i in range(min(len(selected), MAX_ITEMS)):
         cid = int(selected[i])
+        t = types[i] if i < len(types) else "private"
+        r = reply_types[i] if i < len(reply_types) else "default"
 
         item = {
             "id": cid,
-            "reply_type": reply_types[i] if i < len(reply_types) else "default"
+            "reply_type": r
         }
 
-        if types[i] == "group":
+        if t == "group":
             groups.append(item)
         else:
             privates.append(item)
@@ -204,7 +219,7 @@ async def save_chats(
     return RedirectResponse("/", status_code=303)
 
 # ------------------------------
-# KEYWORDS CRUD
+# KEYWORDS
 # ------------------------------
 @app.post("/keywords")
 async def update_keywords(keywords_form: list[str] = Form(default=[])):
@@ -215,7 +230,7 @@ async def update_keywords(keywords_form: list[str] = Form(default=[])):
     return RedirectResponse("/", status_code=303)
 
 # ------------------------------
-# BROADCAST MESSAGE
+# BROADCAST
 # ------------------------------
 @app.post("/broadcast")
 async def broadcast(message: str = Form(...)):
@@ -232,3 +247,10 @@ async def broadcast(message: str = Form(...)):
             pass
 
     return RedirectResponse("/", status_code=303)
+
+# ------------------------------
+# STARTUP
+# ------------------------------
+@app.on_event("startup")
+async def startup():
+    pass
