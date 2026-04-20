@@ -1,7 +1,7 @@
 # Telegram Custom Reply
 
 ## Overview
-Python FastAPI web dashboard for Telegram custom auto-replies. The main app is served from `main.py` with Arabic Jinja templates in `templates/` and responsive styles in `static/`.
+Python FastAPI web dashboard for Telegram custom auto-replies. The main app is served from `main.py` with English Jinja templates in `templates/` and responsive styles in `static/`.
 
 ## Runtime
 - Development workflow runs `uvicorn main:app --host 0.0.0.0 --port 5000`.
@@ -11,7 +11,7 @@ Python FastAPI web dashboard for Telegram custom auto-replies. The main app is s
 - Runtime settings are saved in `app_state.json`, which is ignored by Git. Environment variables `API_ID` and `API_HASH` still take priority when present.
 
 ## Current Features
-- Arabic right-to-left login and dashboard UI.
+- English left-to-right login and dashboard UI.
 - API setup screen for first-time Telegram configuration.
 - Dashboard API settings section.
 - Auto-reply rules: up to 10 saved rules, each with a keyword/phrase, custom reply message, and selected chats.

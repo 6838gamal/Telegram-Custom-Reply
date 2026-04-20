@@ -19,12 +19,12 @@
 *{box-sizing:border-box}
 
 body{
-font-family:Tahoma,Arial,sans-serif;
+font-family:Inter,Arial,sans-serif;
 background:var(--bg);
 color:var(--text);
 margin:0;
 min-height:100vh;
-direction:rtl;
+direction:ltr;
 }
 
 a{color:inherit;text-decoration:none}

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تسجيل الدخول</title>
+<title>Sign In</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="auth-page">
@@ -11,8 +11,8 @@
 <main class="auth-shell">
 <section class="auth-card">
 <div class="brand-mark">TG</div>
-<h1>مركز تحكم Telegram</h1>
-<p class="muted">أدخل بيانات API أولاً، ثم سجل دخولك برقم الهاتف لإدارة الردود التلقائية والبث.</p>
+<h1>Telegram Control Center</h1>
+<p class="muted">Enter your API credentials first, then sign in with your phone number to manage auto-replies and broadcasts.</p>
 
 {% if notice %}
 <div class="alert {{ notice.status }}">{{ notice.message }}</div>
@@ -27,48 +27,48 @@
 {% endif %}
 
 {% if not telegram_ready %}
-<div class="alert warning">بيانات Telegram API غير محفوظة. أدخل API ID و API Hash للمتابعة.</div>
+<div class="alert warning">Telegram API credentials are not saved. Enter API ID and API Hash to continue.</div>
 <form class="stack" method="post" action="/setup_api">
 <label for="api_id">API ID</label>
-<input id="api_id" name="api_id" inputmode="numeric" placeholder="مثال: 123456" required>
+<input id="api_id" name="api_id" inputmode="numeric" placeholder="Example: 123456" required>
 <label for="api_hash">API Hash</label>
-<input id="api_hash" name="api_hash" placeholder="أدخل API Hash" autocomplete="off" required>
-<button class="btn primary" type="submit">حفظ بيانات API</button>
+<input id="api_hash" name="api_hash" placeholder="Enter API Hash" autocomplete="off" required>
+<button class="btn primary" type="submit">Save API Credentials</button>
 </form>
 {% else %}
-<div class="alert success">بيانات API محفوظة: API ID {{ api_id }}</div>
+<div class="alert success">API credentials are saved: API ID {{ api_id }}</div>
 
 {% if step == "phone" %}
 <form class="stack" method="post" action="/send_code">
-<label for="phone">رقم الهاتف</label>
-<input id="phone" name="phone" placeholder="مثال: +966500000000" autocomplete="tel" required>
-<button class="btn primary" type="submit">إرسال رمز التحقق</button>
+<label for="phone">Phone number</label>
+<input id="phone" name="phone" placeholder="Example: +966500000000" autocomplete="tel" required>
+<button class="btn primary" type="submit">Send Verification Code</button>
 </form>
 {% endif %}
 
 {% if step == "code" %}
 <form class="stack" method="post" action="/verify">
-<label for="code">رمز التحقق</label>
-<input id="code" name="code" placeholder="أدخل الرمز من Telegram" autocomplete="one-time-code" required>
-<button class="btn primary" type="submit">تحقق وتابع</button>
+<label for="code">Verification code</label>
+<input id="code" name="code" placeholder="Enter the code from Telegram" autocomplete="one-time-code" required>
+<button class="btn primary" type="submit">Verify and Continue</button>
 </form>
 <form method="get" action="/login">
-<button class="btn ghost" type="submit">استخدام رقم آخر</button>
+<button class="btn ghost" type="submit">Use a Different Phone Number</button>
 </form>
 {% endif %}
 
 {% if step == "password" %}
 <form class="stack" method="post" action="/password">
-<label for="password">كلمة مرور التحقق بخطوتين</label>
-<input id="password" name="password" type="password" placeholder="أدخل كلمة مرور Telegram" autocomplete="current-password" required>
-<button class="btn primary" type="submit">تسجيل الدخول</button>
+<label for="password">Two-step verification password</label>
+<input id="password" name="password" type="password" placeholder="Enter your Telegram password" autocomplete="current-password" required>
+<button class="btn primary" type="submit">Sign In</button>
 </form>
 {% endif %}
 {% endif %}
 
 <div class="help-card">
-<strong>ملاحظة</strong>
-<span>يمكنك الحصول على API ID و API Hash من حسابك في Telegram. استخدم رقم الهاتف بصيغة دولية وانتظر عند ظهور حد مؤقت من Telegram.</span>
+<strong>Note</strong>
+<span>You can get API ID and API Hash from your Telegram account. Use the phone number in international format and wait if Telegram rate limits the request.</span>
 </div>
 </section>
 </main>

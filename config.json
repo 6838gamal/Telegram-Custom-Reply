@@ -2,22 +2,20 @@
     "api_id": null,
     "api_hash": "",
     "keywords": [
-        "ابى مختص",
-        "ابي مدرس",
-        "ابى مدرس",
-"help",
-"I need help",
-        "ابى خصوصي",
-        "من يعرف خصوصي",
-        "عندي واجب",
-        "يسوي بحث",
-        "احد يعرف خصوصي انقليزي؟"
+        "help",
+        "I need help",
+        "specialist",
+        "teacher",
+        "private tutor",
+        "homework",
+        "research help",
+        "English tutor"
     ],
     "allowed_groups": [
         {"id": -1001234567890, "reply_type": "private"},
         {"id": -4936931871, "reply_type": "group"},
         {"id": -1002718581472, "reply_type": "group"}
     ],
-    "group_reply_template": "تفضل خاص، أبشر {user}!",
+    "group_reply_template": "Please send a private message, {user}. I am ready to help.",
     "log_file": "help_requests.json"
 }

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>لوحة التحكم</title>
+<title>Dashboard</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="dashboard-page">
@@ -11,11 +11,11 @@
 <header class="topbar">
 <div>
 <p class="eyebrow">Telegram Custom Reply</p>
-<h1>لوحة التحكم</h1>
+<h1>Dashboard</h1>
 </div>
 <nav class="top-actions">
-<span class="status-pill {{ 'online' if telegram_ready else 'offline' }}">{{ 'Telegram جاهز' if telegram_ready else 'الإعداد غير مكتمل' }}</span>
-<a class="btn ghost" href="/logout">تسجيل الخروج</a>
+<span class="status-pill {{ 'online' if telegram_ready else 'offline' }}">{{ 'Telegram ready' if telegram_ready else 'Setup incomplete' }}</span>
+<a class="btn ghost" href="/logout">Log out</a>
 </nav>
 </header>
 
@@ -26,19 +26,19 @@
 
 <section class="stats-grid">
 <div class="stat-card">
-<span>قواعد الرد</span>
+<span>Auto-reply rules</span>
 <strong>{{ stats.rules }}</strong>
 </div>
 <div class="stat-card">
-<span>قوالب البث</span>
+<span>Broadcast presets</span>
 <strong>{{ stats.presets }}</strong>
 </div>
 <div class="stat-card">
-<span>دردشات محفوظة</span>
+<span>Saved chats</span>
 <strong>{{ stats.saved_chats }}</strong>
 </div>
 <div class="stat-card">
-<span>حالة Telegram</span>
+<span>Telegram status</span>
 <strong class="text-small">{{ stats.telegram }}</strong>
 </div>
 </section>
@@ -46,8 +46,8 @@
 <section class="panel">
 <div class="panel-header">
 <div>
-<h2>إعدادات API</h2>
-<p>يمكن تحديث API ID و API Hash من هنا عند الحاجة. لا يتم عرض API Hash بعد حفظه.</p>
+<h2>API Settings</h2>
+<p>Update API ID and API Hash here when needed. The API Hash is not displayed after it is saved.</p>
 </div>
 </div>
 <form method="post" action="/dashboard_api" class="settings-grid">
@@ -57,26 +57,26 @@
 </div>
 <div class="field">
 <label for="api_hash">API Hash</label>
-<input id="api_hash" name="api_hash" placeholder="أدخل API Hash للحفظ أو التحديث" autocomplete="off" required>
+<input id="api_hash" name="api_hash" placeholder="Enter API Hash to save or update" autocomplete="off" required>
 </div>
-<button class="btn secondary align-end" type="submit">تحديث بيانات API</button>
+<button class="btn secondary align-end" type="submit">Update API Credentials</button>
 </form>
 </section>
 
 <section class="panel">
 <div class="panel-header">
 <div>
-<h2>الدردشات</h2>
-<p>حمّل دردشات Telegram ثم استخدمها داخل قواعد الرد التلقائي أو قوالب البث.</p>
+<h2>Chats</h2>
+<p>Load Telegram chats, then use them in auto-reply rules or broadcast presets.</p>
 </div>
-<button class="btn secondary" type="button" onclick="loadChats()">تحميل دردشات Telegram</button>
+<button class="btn secondary" type="button" onclick="loadChats()">Load Telegram Chats</button>
 </div>
 <div id="chatNotice"></div>
 <div id="chatBox" class="chat-list empty-state">
 {% if available_chats %}
-تم العثور على {{ available_chats|length }} دردشة محفوظة. يمكنك تحميل دردشات Telegram لتحديث القائمة.
+Found {{ available_chats|length }} saved chats. You can load Telegram chats to refresh this list.
 {% else %}
-اضغط “تحميل دردشات Telegram” لجلب الدردشات المتاحة.
+Click “Load Telegram Chats” to fetch available chats.
 {% endif %}
 </div>
 </section>
@@ -84,10 +84,10 @@
 <section class="panel">
 <div class="panel-header">
 <div>
-<h2>الرد التلقائي</h2>
-<p>أنشئ حتى 10 قواعد. كل قاعدة تحتوي على كلمة مفتاحية، الرد المناسب، والدردشات المعنية.</p>
+<h2>Auto Replies</h2>
+<p>Create up to 10 rules. Each rule contains a keyword or phrase, the reply message, and the relevant chats.</p>
 </div>
-<button class="btn secondary" type="button" onclick="addRule()">إضافة قاعدة</button>
+<button class="btn secondary" type="button" onclick="addRule()">Add Rule</button>
 </div>
 <form method="post" action="/auto_replies" class="stack">
 <div id="ruleList" class="dynamic-list cards-list">
@@ -95,57 +95,57 @@
 {% for rule in auto_reply_rules %}
 <div class="config-card rule-card" data-kind="rule">
 <div class="card-topline">
-<strong>قاعدة رد تلقائي</strong>
-<button class="btn danger" type="button" onclick="removeCard(this, 'rule')">حذف</button>
+<strong>Auto-reply Rule</strong>
+<button class="btn danger" type="button" onclick="removeCard(this, 'rule')">Delete</button>
 </div>
 <div class="field">
-<label>الكلمة أو العبارة</label>
-<input name="rule_keyword" value="{{ rule.keyword }}" placeholder="مثال: أحتاج مساعدة" required>
+<label>Keyword or phrase</label>
+<input name="rule_keyword" value="{{ rule.keyword }}" placeholder="Example: I need help" required>
 </div>
 <div class="field">
-<label>الرد المناسب</label>
-<textarea name="rule_reply" rows="3" placeholder="اكتب الرد الذي سيرسل عند ظهور الكلمة" required>{{ rule.reply }}</textarea>
+<label>Reply message</label>
+<textarea name="rule_reply" rows="3" placeholder="Write the reply that will be sent when the keyword appears" required>{{ rule.reply }}</textarea>
 </div>
 <div class="field">
-<label>الدردشات المعنية</label>
+<label>Relevant chats</label>
 <div class="target-options" data-target-name="rule_chats_{{ loop.index0 }}" data-selected='{{ rule.chats|map(attribute="id")|list|tojson }}'></div>
-<p class="hint">إذا لم تختر أي دردشة فستعمل القاعدة على كل الدردشات المتاحة للحساب.</p>
+<p class="hint">If you do not select any chats, the rule can apply to all available chats for the account.</p>
 </div>
 </div>
 {% endfor %}
 {% else %}
 <div class="config-card rule-card" data-kind="rule">
 <div class="card-topline">
-<strong>قاعدة رد تلقائي</strong>
-<button class="btn danger" type="button" onclick="removeCard(this, 'rule')">حذف</button>
+<strong>Auto-reply Rule</strong>
+<button class="btn danger" type="button" onclick="removeCard(this, 'rule')">Delete</button>
 </div>
 <div class="field">
-<label>الكلمة أو العبارة</label>
-<input name="rule_keyword" placeholder="مثال: أحتاج مساعدة" required>
+<label>Keyword or phrase</label>
+<input name="rule_keyword" placeholder="Example: I need help" required>
 </div>
 <div class="field">
-<label>الرد المناسب</label>
-<textarea name="rule_reply" rows="3" placeholder="اكتب الرد الذي سيرسل عند ظهور الكلمة" required></textarea>
+<label>Reply message</label>
+<textarea name="rule_reply" rows="3" placeholder="Write the reply that will be sent when the keyword appears" required></textarea>
 </div>
 <div class="field">
-<label>الدردشات المعنية</label>
+<label>Relevant chats</label>
 <div class="target-options" data-target-name="rule_chats_0" data-selected="[]"></div>
-<p class="hint">إذا لم تختر أي دردشة فستعمل القاعدة على كل الدردشات المتاحة للحساب.</p>
+<p class="hint">If you do not select any chats, the rule can apply to all available chats for the account.</p>
 </div>
 </div>
 {% endif %}
 </div>
-<button class="btn primary" type="submit">حفظ قواعد الرد</button>
+<button class="btn primary" type="submit">Save Auto-reply Rules</button>
 </form>
 </section>
 
 <section class="panel">
 <div class="panel-header">
 <div>
-<h2>البث</h2>
-<p>احفظ حتى 10 قوالب بث. كل قالب يحتوي على اسم، رسالة، ودردشات محددة، ويمكن الرجوع إليه لاحقاً.</p>
+<h2>Broadcasts</h2>
+<p>Save up to 10 broadcast presets. Each preset has a title, message, and selected chats so you can return to it later.</p>
 </div>
-<button class="btn secondary" type="button" onclick="addPreset()">إضافة بث</button>
+<button class="btn secondary" type="button" onclick="addPreset()">Add Broadcast</button>
 </div>
 <form method="post" action="/broadcast_presets" class="stack">
 <div id="presetList" class="dynamic-list cards-list">
@@ -153,21 +153,21 @@
 {% for preset in broadcast_presets %}
 <div class="config-card preset-card" data-kind="preset">
 <div class="card-topline">
-<strong>قالب بث</strong>
+<strong>Broadcast Preset</strong>
 <div class="inline-actions">
-<button class="btn danger" type="button" onclick="removeCard(this, 'preset')">حذف</button>
+<button class="btn danger" type="button" onclick="removeCard(this, 'preset')">Delete</button>
 </div>
 </div>
 <div class="field">
-<label>اسم القالب</label>
-<input name="preset_title" value="{{ preset.title }}" placeholder="مثال: رسالة المتابعة">
+<label>Preset title</label>
+<input name="preset_title" value="{{ preset.title }}" placeholder="Example: Follow-up message">
 </div>
 <div class="field">
-<label>رسالة البث</label>
-<textarea name="preset_message" rows="4" placeholder="اكتب رسالة البث" required>{{ preset.message }}</textarea>
+<label>Broadcast message</label>
+<textarea name="preset_message" rows="4" placeholder="Write the broadcast message" required>{{ preset.message }}</textarea>
 </div>
 <div class="field">
-<label>الدردشات</label>
+<label>Chats</label>
 <div class="target-options" data-target-name="preset_chats_{{ loop.index0 }}" data-selected='{{ preset.chats|map(attribute="id")|list|tojson }}'></div>
 </div>
 </div>
@@ -175,36 +175,36 @@
 {% else %}
 <div class="config-card preset-card" data-kind="preset">
 <div class="card-topline">
-<strong>قالب بث</strong>
-<button class="btn danger" type="button" onclick="removeCard(this, 'preset')">حذف</button>
+<strong>Broadcast Preset</strong>
+<button class="btn danger" type="button" onclick="removeCard(this, 'preset')">Delete</button>
 </div>
 <div class="field">
-<label>اسم القالب</label>
-<input name="preset_title" placeholder="مثال: رسالة المتابعة">
+<label>Preset title</label>
+<input name="preset_title" placeholder="Example: Follow-up message">
 </div>
 <div class="field">
-<label>رسالة البث</label>
-<textarea name="preset_message" rows="4" placeholder="اكتب رسالة البث" required></textarea>
+<label>Broadcast message</label>
+<textarea name="preset_message" rows="4" placeholder="Write the broadcast message" required></textarea>
 </div>
 <div class="field">
-<label>الدردشات</label>
+<label>Chats</label>
 <div class="target-options" data-target-name="preset_chats_0" data-selected="[]"></div>
 </div>
 </div>
 {% endif %}
 </div>
-<button class="btn primary" type="submit">حفظ قوالب البث</button>
+<button class="btn primary" type="submit">Save Broadcast Presets</button>
 </form>
 
 {% if broadcast_presets %}
 <div class="saved-actions">
-<h3>إرسال قالب محفوظ</h3>
+<h3>Send a Saved Preset</h3>
 <div class="send-grid">
 {% for preset in broadcast_presets %}
 <form method="post" action="/broadcast_preset/{{ loop.index0 }}" class="send-card">
 <strong>{{ preset.title }}</strong>
-<span>{{ preset.chats|length }} دردشة</span>
-<button class="btn primary" type="submit">إرسال الآن</button>
+<span>{{ preset.chats|length }} chats</span>
+<button class="btn primary" type="submit">Send Now</button>
 </form>
 {% endfor %}
 </div>
@@ -231,7 +231,7 @@ function escapeHtml(value){
 }
 
 function chatValue(chat){
-    return `${chat.id}|${chat.type || "private"}|${chat.name || "دردشة بدون اسم"}`;
+    return `${chat.id}|${chat.type || "private"}|${chat.name || "Unnamed chat"}`;
 }
 
 function renderTargetOptions(){
@@ -240,13 +240,13 @@ function renderTargetOptions(){
         const name = target.dataset.targetName;
 
         if(!availableChats.length){
-            target.innerHTML = '<div class="empty-state compact">لا توجد دردشات محفوظة بعد. حمّل الدردشات من الأعلى أولاً.</div>';
+            target.innerHTML = '<div class="empty-state compact">No saved chats yet. Load chats from the section above first.</div>';
             return;
         }
 
         target.innerHTML = availableChats.map((chat) => {
             const id = String(chat.id);
-            const safeName = escapeHtml(chat.name || "دردشة بدون اسم");
+            const safeName = escapeHtml(chat.name || "Unnamed chat");
             const safeType = escapeHtml(chat.type || "private");
             return `<label class="mini-chat-row">
                 <input type="checkbox" name="${escapeHtml(name)}" value="${escapeHtml(chatValue(chat))}" ${selected.has(id) ? "checked" : ""}>
@@ -282,17 +282,17 @@ function removeCard(button, kind){
 function addRule(){
     const list = document.getElementById("ruleList");
     if(list.children.length >= 10){
-        alert("يمكن حفظ 10 قواعد كحد أقصى.");
+        alert("You can save up to 10 rules.");
         return;
     }
     const index = list.children.length;
     const card = document.createElement("div");
     card.className = "config-card rule-card";
     card.dataset.kind = "rule";
-    card.innerHTML = `<div class="card-topline"><strong>قاعدة رد تلقائي</strong><button class="btn danger" type="button" onclick="removeCard(this, 'rule')">حذف</button></div>
-        <div class="field"><label>الكلمة أو العبارة</label><input name="rule_keyword" placeholder="مثال: أحتاج مساعدة" required></div>
-        <div class="field"><label>الرد المناسب</label><textarea name="rule_reply" rows="3" placeholder="اكتب الرد الذي سيرسل عند ظهور الكلمة" required></textarea></div>
-        <div class="field"><label>الدردشات المعنية</label><div class="target-options" data-target-name="rule_chats_${index}" data-selected="[]"></div><p class="hint">إذا لم تختر أي دردشة فستعمل القاعدة على كل الدردشات المتاحة للحساب.</p></div>`;
+    card.innerHTML = `<div class="card-topline"><strong>Auto-reply Rule</strong><button class="btn danger" type="button" onclick="removeCard(this, 'rule')">Delete</button></div>
+        <div class="field"><label>Keyword or phrase</label><input name="rule_keyword" placeholder="Example: I need help" required></div>
+        <div class="field"><label>Reply message</label><textarea name="rule_reply" rows="3" placeholder="Write the reply that will be sent when the keyword appears" required></textarea></div>
+        <div class="field"><label>Relevant chats</label><div class="target-options" data-target-name="rule_chats_${index}" data-selected="[]"></div><p class="hint">If you do not select any chats, the rule can apply to all available chats for the account.</p></div>`;
     list.appendChild(card);
     renderTargetOptions();
 }
@@ -300,17 +300,17 @@ function addRule(){
 function addPreset(){
     const list = document.getElementById("presetList");
     if(list.children.length >= 10){
-        alert("يمكن حفظ 10 قوالب بث كحد أقصى.");
+        alert("You can save up to 10 broadcast presets.");
         return;
     }
     const index = list.children.length;
     const card = document.createElement("div");
     card.className = "config-card preset-card";
     card.dataset.kind = "preset";
-    card.innerHTML = `<div class="card-topline"><strong>قالب بث</strong><button class="btn danger" type="button" onclick="removeCard(this, 'preset')">حذف</button></div>
-        <div class="field"><label>اسم القالب</label><input name="preset_title" placeholder="مثال: رسالة المتابعة"></div>
-        <div class="field"><label>رسالة البث</label><textarea name="preset_message" rows="4" placeholder="اكتب رسالة البث" required></textarea></div>
-        <div class="field"><label>الدردشات</label><div class="target-options" data-target-name="preset_chats_${index}" data-selected="[]"></div></div>`;
+    card.innerHTML = `<div class="card-topline"><strong>Broadcast Preset</strong><button class="btn danger" type="button" onclick="removeCard(this, 'preset')">Delete</button></div>
+        <div class="field"><label>Preset title</label><input name="preset_title" placeholder="Example: Follow-up message"></div>
+        <div class="field"><label>Broadcast message</label><textarea name="preset_message" rows="4" placeholder="Write the broadcast message" required></textarea></div>
+        <div class="field"><label>Chats</label><div class="target-options" data-target-name="preset_chats_${index}" data-selected="[]"></div></div>`;
     list.appendChild(card);
     renderTargetOptions();
 }
@@ -318,40 +318,40 @@ function addPreset(){
 async function loadChats(){
     const box = document.getElementById("chatBox");
     box.className = "chat-list empty-state";
-    box.innerHTML = "جاري تحميل الدردشات...";
-    showChatNotice("warning", "جاري الاتصال بـ Telegram وتحميل الدردشات...");
+    box.innerHTML = "Loading chats...";
+    showChatNotice("warning", "Connecting to Telegram and loading chats...");
 
     try{
         const res = await fetch("/load_chats");
         const data = await res.json();
 
         if(!data.ok){
-            box.innerHTML = "لم يتم تحميل أي دردشات.";
-            showChatNotice("error", escapeHtml(data.message || "تعذر تحميل الدردشات."));
+            box.innerHTML = "No chats were loaded.";
+            showChatNotice("error", escapeHtml(data.message || "Unable to load chats."));
             return;
         }
 
         availableChats = data.chats || [];
 
         if(!availableChats.length){
-            box.innerHTML = "لم يتم العثور على دردشات في هذا الحساب.";
-            showChatNotice("warning", "تم الاتصال بنجاح، لكن Telegram لم يرجع دردشات.");
+            box.innerHTML = "No chats were found in this account.";
+            showChatNotice("warning", "Connected successfully, but Telegram did not return any chats.");
             renderTargetOptions();
             return;
         }
 
         box.className = "chat-list";
         box.innerHTML = availableChats.map((chat) => {
-            const safeName = escapeHtml(chat.name || "دردشة بدون اسم");
+            const safeName = escapeHtml(chat.name || "Unnamed chat");
             const safeType = escapeHtml(chat.type || "private");
             return `<div class="chat-row"><span><strong>${safeName}</strong><small>${safeType} • ${escapeHtml(chat.id)}</small></span></div>`;
         }).join("");
 
         renderTargetOptions();
-        showChatNotice("success", escapeHtml(data.message || "تم تحميل الدردشات بنجاح."));
+        showChatNotice("success", escapeHtml(data.message || "Chats loaded successfully."));
     }catch(error){
-        box.innerHTML = "لم يتم تحميل أي دردشات.";
-        showChatNotice("error", `تعذر تحميل الدردشات: ${escapeHtml(error.message)}`);
+        box.innerHTML = "No chats were loaded.";
+        showChatNotice("error", `Unable to load chats: ${escapeHtml(error.message)}`);
     }
 }
 
