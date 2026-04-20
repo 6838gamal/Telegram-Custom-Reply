@@ -1,36 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css">
+<meta charset="UTF-8">
+<title>Dashboard</title>
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
 <div class="container">
 
-    <h1>Bot Dashboard</h1>
-    <p class="status">Status: {{ status }}</p>
+<h1>Telegram Bot Dashboard</h1>
+<p>Status: {{ status }}</p>
 
-    <div class="card">
-        <h2>Keywords</h2>
+<!-- KEYWORDS -->
+<div class="card">
+<h2>Keywords</h2>
 
-        <form method="post" action="/update_keywords">
-            {% for kw in keywords %}
-            <div class="row">
-                <input type="text" name="keywords" value="{{ kw }}">
-                <button name="delete" value="{{ kw }}" class="btn danger">Delete</button>
-            </div>
-            {% endfor %}
+<form method="post" action="/keywords">
+{% for k in keywords %}
+<input name="keywords" value="{{ k }}">
+{% endfor %}
 
-            <div class="actions">
-                <button name="add" value="1" class="btn info">Add</button>
-                <button class="btn success">Save</button>
-            </div>
-        </form>
-    </div>
+<button class="btn">Save</button>
+</form>
+</div>
+
+<!-- CHAT SELECTOR -->
+<div class="card">
+
+<h2>Telegram Chats</h2>
+
+<button onclick="loadChats()" class="btn">Load Chats</button>
+
+<form method="post" action="/save_chats">
+<div id="chatBox"></div>
+<button class="btn">Save Chats</button>
+</form>
 
 </div>
+
+<!-- BROADCAST -->
+<div class="card">
+
+<h2>Broadcast</h2>
+
+<form method="post" action="/broadcast">
+<textarea name="message">{{ broadcast_message }}</textarea>
+<button class="btn">Send</button>
+</form>
+
+</div>
+
+</div>
+
+<script>
+async function loadChats(){
+    const res = await fetch("/load_chats");
+    const data = await res.json();
+
+    const box = document.getElementById("chatBox");
+    box.innerHTML = "";
+
+    data.chats.forEach(c=>{
+        box.innerHTML += `
+        <div>
+            <input type="checkbox" name="selected" value="${c.id}">
+            ${c.name} (${c.type})
+        </div>`;
+    });
+}
+</script>
 
 </body>
 </html>
