@@ -1,5 +1,4 @@
 import os
-import json
 import asyncio
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import RedirectResponse
@@ -8,44 +7,33 @@ from fastapi.templating import Jinja2Templates
 from pyrogram import Client, filters
 
 # ------------------------------
-# APP SETUP
+# APP
 # ------------------------------
 app = FastAPI()
-
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-CONFIG_FILE = "config.json"
 bot_status = "⏳ Starting..."
-
 MAX_ITEMS = 10
 
 # ------------------------------
-# ENV + CONFIG
+# ENV CONFIG (NO CONFIG FILE)
 # ------------------------------
-def load_config():
-    if not os.path.exists(CONFIG_FILE):
-        raise FileNotFoundError("config.json not found")
-    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+API_ID = os.getenv("API_ID")
+API_HASH = os.getenv("API_HASH")
 
-def save_config():
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
+if not API_ID or not API_HASH:
+    raise Exception("❌ API_ID and API_HASH must be set in environment variables")
 
-config = load_config()
-
-# 🔥 ENV overrides (if exists)
-API_ID = int(os.getenv("API_ID", config["api_id"]))
-API_HASH = os.getenv("API_HASH", config["api_hash"])
+API_ID = int(API_ID)
 
 # ------------------------------
-# DEFAULT STRUCTURE SAFETY
+# IN-MEMORY DATA
 # ------------------------------
-config.setdefault("keywords", [])
-config.setdefault("allowed_groups", [])
-config.setdefault("private_chats", [])
-config.setdefault("broadcast_message", "Hello!")
+keywords = []
+allowed_groups = []
+private_chats = []
+broadcast_message = "Hello from bot!"
 
 # ------------------------------
 # TELEGRAM CLIENT
@@ -57,17 +45,17 @@ telegram = Client(
     in_memory=True
 )
 
-auth_data = {}
+auth = {}
 is_authenticated = False
 
 # ------------------------------
-# KEYWORD MATCHER
+# KEYWORD MATCH
 # ------------------------------
 def match_keyword(text: str):
-    for kw in config["keywords"]:
-        if kw.lower() in text:
-            return kw
-    return None
+    for k in keywords:
+        if k.lower() in text:
+            return True
+    return False
 
 # ------------------------------
 # MESSAGE HANDLER
@@ -102,8 +90,8 @@ async def send_code(request: Request, phone: str = Form(...)):
 
     sent = await telegram.send_code(phone)
 
-    auth_data["phone"] = phone
-    auth_data["phone_code_hash"] = sent.phone_code_hash
+    auth["phone"] = phone
+    auth["hash"] = sent.phone_code_hash
 
     return templates.TemplateResponse(
         request=request,
@@ -118,21 +106,29 @@ async def send_code(request: Request, phone: str = Form(...)):
 async def verify(request: Request, code: str = Form(...)):
     global is_authenticated, bot_status
 
-    await telegram.sign_in(
-        auth_data["phone"],
-        auth_data["phone_code_hash"],
-        code
-    )
+    try:
+        await telegram.sign_in(
+            auth["phone"],
+            auth["hash"],
+            code
+        )
 
-    is_authenticated = True
-    bot_status = "✅ Running"
+        is_authenticated = True
+        bot_status = "✅ Running"
 
-    asyncio.create_task(telegram.idle())
+        asyncio.create_task(telegram.idle())
 
-    return RedirectResponse("/", status_code=303)
+        return RedirectResponse("/", status_code=303)
+
+    except Exception as e:
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={"step": "code", "error": str(e)}
+        )
 
 # ------------------------------
-# DASHBOARD PROTECTION
+# DASHBOARD
 # ------------------------------
 @app.get("/")
 async def dashboard(request: Request):
@@ -144,15 +140,15 @@ async def dashboard(request: Request):
         name="index.html",
         context={
             "status": bot_status,
-            "keywords": config["keywords"],
-            "groups": config["allowed_groups"],
-            "private_chats": config["private_chats"],
-            "broadcast_message": config["broadcast_message"]
+            "keywords": keywords,
+            "groups": allowed_groups,
+            "private_chats": private_chats,
+            "broadcast_message": broadcast_message
         }
     )
 
 # ------------------------------
-# LOAD TELEGRAM CHATS
+# LOAD CHATS FROM TELEGRAM
 # ------------------------------
 @app.get("/load_chats")
 async def load_chats():
@@ -177,6 +173,8 @@ async def load_chats():
 # ------------------------------
 @app.post("/save_chats")
 async def save_chats(selected: list[str] = Form(...)):
+    global allowed_groups, private_chats
+
     groups = []
     privates = []
 
@@ -188,10 +186,8 @@ async def save_chats(selected: list[str] = Form(...)):
         else:
             privates.append(cid)
 
-    config["allowed_groups"] = groups
-    config["private_chats"] = privates
-
-    save_config()
+    allowed_groups = groups
+    private_chats = privates
 
     return RedirectResponse("/", status_code=303)
 
@@ -199,25 +195,23 @@ async def save_chats(selected: list[str] = Form(...)):
 # KEYWORDS UPDATE
 # ------------------------------
 @app.post("/keywords")
-async def keywords(keywords: list[str] = Form(default=[])):
-    config["keywords"] = [
-        k.strip() for k in keywords if k.strip()
-    ][:MAX_ITEMS]
+async def update_keywords(keywords_form: list[str] = Form(default=[])):
+    global keywords
 
-    save_config()
+    keywords = [k.strip() for k in keywords_form if k.strip()][:MAX_ITEMS]
 
     return RedirectResponse("/", status_code=303)
 
 # ------------------------------
-# BROADCAST
+# BROADCAST MESSAGE
 # ------------------------------
 @app.post("/broadcast")
-async def broadcast():
-    message = config["broadcast_message"]
+async def broadcast(message: str = Form(...)):
+    global broadcast_message
 
-    targets = config["allowed_groups"] + [
-        {"id": x} for x in config["private_chats"]
-    ]
+    broadcast_message = message
+
+    targets = allowed_groups + [{"id": x} for x in private_chats]
 
     for t in targets[:MAX_ITEMS]:
         try:
