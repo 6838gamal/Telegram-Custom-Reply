@@ -9,6 +9,13 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pyrogram import Client, filters
+from pyrogram.errors import (
+    FloodWait,
+    PhoneCodeExpired,
+    PhoneCodeInvalid,
+    PhoneNumberInvalid,
+    SessionPasswordNeeded,
+)
 
 # =========================
 # APP
@@ -73,6 +80,7 @@ MAX_ITEMS = 10
 # TELEGRAM
 # =========================
 telegram = None
+telegram_lock = asyncio.Lock()
 
 if TELEGRAM_READY:
     telegram = Client(
@@ -88,6 +96,53 @@ def telegram_required():
             status_code=503,
             detail="Telegram API credentials are not configured."
         )
+
+async def ensure_telegram_connected():
+    telegram_required()
+
+    async with telegram_lock:
+        if getattr(telegram, "is_connected", False):
+            return
+
+        try:
+            await telegram.connect()
+        except ConnectionError as error:
+            if "already connected" not in str(error).lower():
+                raise
+
+async def ensure_telegram_initialized():
+    if getattr(telegram, "is_initialized", False):
+        return
+
+    try:
+        await telegram.initialize()
+    except ConnectionError as error:
+        if "already initialized" not in str(error).lower():
+            raise
+
+def login_response(request: Request, step: str, error: str | None = None, status_code: int = 200):
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={
+            "step": step,
+            "telegram_ready": TELEGRAM_READY,
+            "error": error
+        },
+        status_code=status_code
+    )
+
+def dashboard_redirect():
+    token = create_token()
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie(
+        "token",
+        token,
+        httponly=True,
+        samesite="lax",
+        max_age=EXPIRE_MINUTES * 60
+    )
+    return response
 
 # =========================
 # KEYWORD MATCH
@@ -133,75 +188,73 @@ if telegram is not None:
 # =========================
 @app.get("/login")
 async def login(request: Request):
-    return templates.TemplateResponse(
-        request=request,
-        name="login.html",
-        context={
-            "step": "phone",
-            "telegram_ready": TELEGRAM_READY
-        }
-    )
+    return login_response(request, "phone")
 
 @app.post("/send_code")
 async def send_code(request: Request, phone: str = Form(...)):
     if telegram is None:
-        return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context={
-                "step": "phone",
-                "telegram_ready": False,
-                "error": "Telegram API credentials are not configured."
-            },
-            status_code=503
+        return login_response(
+            request,
+            "phone",
+            "Telegram API credentials are not configured.",
+            503
         )
 
-    await telegram.connect()
+    try:
+        await ensure_telegram_connected()
 
-    sent = await telegram.send_code(phone)
+        sent = await telegram.send_code(phone.strip())
 
-    auth_data["phone"] = phone
-    auth_data["hash"] = sent.phone_code_hash
+        auth_data["phone"] = phone.strip()
+        auth_data["hash"] = sent.phone_code_hash
 
-    return templates.TemplateResponse(
-        request=request,
-        name="login.html",
-        context={
-            "step": "code",
-            "telegram_ready": TELEGRAM_READY
-        }
-    )
+        return login_response(request, "code")
+    except PhoneNumberInvalid:
+        return login_response(request, "phone", "رقم الجوال غير صحيح. اكتب الرقم مع رمز الدولة مثل +966...")
+    except FloodWait as error:
+        return login_response(request, "phone", f"تيليجرام طلب الانتظار {error.value} ثانية قبل المحاولة مرة أخرى.")
+    except Exception as error:
+        return login_response(request, "phone", str(error), 500)
 
 @app.post("/verify")
 async def verify(request: Request, code: str = Form(...)):
-    telegram_required()
-
     try:
+        await ensure_telegram_connected()
+
+        if not auth_data.get("phone") or not auth_data.get("hash"):
+            return login_response(request, "phone", "ابدأ بإرسال رقم الجوال أولاً.")
+
         await telegram.sign_in(
             auth_data["phone"],
             auth_data["hash"],
-            code
+            code.strip()
         )
 
-        token = create_token()
-
-        response = RedirectResponse("/", status_code=303)
-        response.set_cookie("token", token, httponly=True)
-
-        asyncio.create_task(telegram.idle())
-
-        return response
-
+        await ensure_telegram_initialized()
+        return dashboard_redirect()
+    except SessionPasswordNeeded:
+        return login_response(request, "password", "الحساب يحتاج كلمة مرور التحقق بخطوتين.")
+    except PhoneCodeInvalid:
+        return login_response(request, "code", "كود التحقق غير صحيح.")
+    except PhoneCodeExpired:
+        auth_data.clear()
+        return login_response(request, "phone", "انتهت صلاحية كود التحقق. أرسل الكود من جديد.")
+    except FloodWait as error:
+        return login_response(request, "code", f"تيليجرام طلب الانتظار {error.value} ثانية قبل المحاولة مرة أخرى.")
     except Exception as e:
-        return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context={
-                "step": "code",
-                "telegram_ready": TELEGRAM_READY,
-                "error": str(e)
-            }
-        )
+        return login_response(request, "code", str(e), 500)
+
+@app.post("/password")
+async def verify_password(request: Request, password: str = Form(...)):
+    try:
+        await ensure_telegram_connected()
+        await telegram.check_password(password.strip())
+        await ensure_telegram_initialized()
+        return dashboard_redirect()
+    except FloodWait as error:
+        return login_response(request, "password", f"تيليجرام طلب الانتظار {error.value} ثانية قبل المحاولة مرة أخرى.")
+    except Exception as error:
+        return login_response(request, "password", str(error), 500)
 
 # =========================
 # DASHBOARD (INGEST)

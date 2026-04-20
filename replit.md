@@ -11,3 +11,4 @@ Python FastAPI web dashboard for Telegram custom auto-replies. The main app is s
 ## Notes
 - The root route redirects unauthenticated users to `/login`.
 - The app starts even when Telegram credentials are missing, showing a setup message instead of crashing.
+- Telegram login now safely reuses an existing Pyrogram connection, handles invalid/expired codes, rate-limit waits, and two-step password verification before redirecting to the dashboard.

