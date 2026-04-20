@@ -11,3 +11,4 @@ tgcrypto
 jinja2
 python-multipart
 itsdangerous
+jwt
