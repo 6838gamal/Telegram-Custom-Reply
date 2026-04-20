@@ -1,81 +1,207 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body class="dashboard-page">
 
-<div class="layout">
+<header class="topbar">
+<div>
+<p class="eyebrow">Telegram Custom Reply</p>
+<h1>Dashboard</h1>
+</div>
+<nav class="top-actions">
+<span class="status-pill {{ 'online' if telegram_ready else 'offline' }}">{{ 'Telegram ready' if telegram_ready else 'Setup required' }}</span>
+<a class="btn ghost" href="/logout">Log out</a>
+</nav>
+</header>
 
-<!-- LEFT -->
-<div class="left">
+<main class="dashboard-shell">
+{% if notice %}
+<div class="alert {{ notice.status }}">{{ notice.message }}</div>
+{% endif %}
 
-<h2>Keywords</h2>
+<section class="stats-grid">
+<div class="stat-card">
+<span>Keyword rules</span>
+<strong>{{ stats.keywords }}</strong>
+</div>
+<div class="stat-card">
+<span>Group targets</span>
+<strong>{{ stats.groups }}</strong>
+</div>
+<div class="stat-card">
+<span>Private targets</span>
+<strong>{{ stats.private }}</strong>
+</div>
+<div class="stat-card">
+<span>Total targets</span>
+<strong>{{ stats.total_chats }}</strong>
+</div>
+</section>
 
-<form method="post" action="/keywords">
-{% for k in keywords %}
-<input name="keywords" value="{{ k }}">
+<section class="grid two-columns">
+<div class="panel">
+<div class="panel-header">
+<div>
+<h2>Keyword Rules</h2>
+<p>Messages containing these words will trigger the auto-reply engine.</p>
+</div>
+<button class="btn secondary" type="button" onclick="addKeyword()">Add keyword</button>
+</div>
+<form method="post" action="/keywords" class="stack">
+<div id="keywordList" class="dynamic-list">
+{% if keywords %}
+{% for keyword in keywords %}
+<div class="row-input">
+<input name="keywords" value="{{ keyword }}" placeholder="Keyword or phrase">
+<button class="btn danger" type="button" onclick="removeRow(this)">Remove</button>
+</div>
 {% endfor %}
-<button>Save</button>
+{% else %}
+<div class="row-input">
+<input name="keywords" placeholder="Example: I need help">
+<button class="btn danger" type="button" onclick="removeRow(this)">Remove</button>
+</div>
+{% endif %}
+</div>
+<p class="hint">Up to 10 unique keyword rules can be saved.</p>
+<button class="btn primary" type="submit">Save keywords</button>
 </form>
-
-<hr>
-
-<h2>Load Chats</h2>
-
-<button onclick="loadChats()">Load Telegram Chats</button>
-
-<form method="post" action="/save_chats">
-<div id="chatBox"></div>
-<div id="typeBox"></div>
-<div id="replyBox"></div>
-
-<button>Save Chats</button>
-</form>
-
 </div>
 
-<!-- RIGHT -->
-<div class="right">
-
-<h2>Saved Chats</h2>
-<div id="savedChats"></div>
-
+<div class="panel">
+<div class="panel-header">
+<div>
 <h2>Broadcast</h2>
-<form method="post" action="/broadcast">
-<textarea name="message">{{ broadcast_message }}</textarea>
-<button>Send</button>
+<p>Send a message to all saved target chats. Failures are reported without stopping the app.</p>
+</div>
+</div>
+<form method="post" action="/broadcast" class="stack">
+<label for="message">Message</label>
+<textarea id="message" name="message" rows="8" placeholder="Write your broadcast message...">{{ broadcast_message }}</textarea>
+<button class="btn primary" type="submit">Send broadcast</button>
 </form>
-
 </div>
+</section>
 
+<section class="panel">
+<div class="panel-header">
+<div>
+<h2>Chat Targets</h2>
+<p>Load Telegram chats, choose up to 10 targets, then save them for auto replies and broadcasts.</p>
 </div>
+<button class="btn secondary" type="button" onclick="loadChats()">Load Telegram chats</button>
+</div>
+<div id="chatNotice"></div>
+<form method="post" action="/save_chats" class="stack">
+<div id="chatBox" class="chat-list empty-state">
+Click “Load Telegram chats” to fetch available chats.
+</div>
+<button class="btn primary" type="submit">Save selected chats</button>
+</form>
+</section>
+
+<section class="panel">
+<div class="panel-header">
+<div>
+<h2>Saved Targets</h2>
+<p>These chats are currently selected for automation.</p>
+</div>
+</div>
+{% if selected_chats %}
+<div class="saved-grid">
+{% for chat in selected_chats %}
+<div class="saved-card">
+<strong>{{ chat.name or chat.id }}</strong>
+<span>{{ chat.type|capitalize }} • {{ chat.id }}</span>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No saved chat targets yet.</div>
+{% endif %}
+</section>
+</main>
 
 <script>
-
-async function loadChats(){
-    const res = await fetch("/load_chats");
-    const data = await res.json();
-
-    const box = document.getElementById("chatBox");
-    box.innerHTML = "";
-
-    data.chats.forEach(c=>{
-        box.innerHTML += `
-        <div>
-            <input type="checkbox" name="selected" value="${c.id}">
-            <input name="types" value="${c.type}">
-            <select name="reply_types">
-                <option value="group">Group Reply</option>
-                <option value="private">Private Reply</option>
-                <option value="default">Default</option>
-            </select>
-            ${c.name}
-        </div>`;
-    });
+function showChatNotice(type, message){
+    const notice = document.getElementById("chatNotice");
+    notice.innerHTML = `<div class="alert ${type}">${message}</div>`;
 }
 
+function escapeHtml(value){
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+function addKeyword(){
+    const list = document.getElementById("keywordList");
+    const row = document.createElement("div");
+    row.className = "row-input";
+    row.innerHTML = '<input name="keywords" placeholder="Keyword or phrase"><button class="btn danger" type="button" onclick="removeRow(this)">Remove</button>';
+    list.appendChild(row);
+}
+
+function removeRow(button){
+    const list = document.getElementById("keywordList");
+    if(list.children.length === 1){
+        button.closest(".row-input").querySelector("input").value = "";
+        return;
+    }
+    button.closest(".row-input").remove();
+}
+
+async function loadChats(){
+    const box = document.getElementById("chatBox");
+    box.className = "chat-list empty-state";
+    box.innerHTML = "Loading chats...";
+    showChatNotice("warning", "Connecting to Telegram and loading chats...");
+
+    try{
+        const res = await fetch("/load_chats");
+        const data = await res.json();
+
+        if(!data.ok){
+            box.innerHTML = "No chats loaded.";
+            showChatNotice("error", escapeHtml(data.message || "Unable to load chats."));
+            return;
+        }
+
+        if(!data.chats.length){
+            box.innerHTML = "No chats were found in this Telegram account.";
+            showChatNotice("warning", "Telegram responded successfully, but no chats were returned.");
+            return;
+        }
+
+        box.className = "chat-list";
+        box.innerHTML = data.chats.map((chat, index) => {
+            const safeName = escapeHtml(chat.name || "Unnamed chat");
+            const safeType = escapeHtml(chat.type || "private");
+            const value = `${chat.id}|${safeType}|${safeName}`;
+            return `
+            <label class="chat-row">
+                <input type="checkbox" name="selected_chats" value="${escapeHtml(value)}" ${index < 3 ? "checked" : ""}>
+                <span>
+                    <strong>${safeName}</strong>
+                    <small>${safeType} • ${chat.id}</small>
+                </span>
+            </label>`;
+        }).join("");
+
+        showChatNotice("success", escapeHtml(data.message || "Chats loaded successfully."));
+    }catch(error){
+        box.innerHTML = "No chats loaded.";
+        showChatNotice("error", `Unable to load chats: ${escapeHtml(error.message)}`);
+    }
+}
 </script>
 
 </body>
