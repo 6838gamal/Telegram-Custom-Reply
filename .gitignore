@@ -4,3 +4,5 @@ __pycache__/
 *.session
 *.session-journal
 .env
+app_state.json
+app_state.json.tmp

@@ -2,7 +2,7 @@ import os
 import secrets
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request, Form, HTTPException
@@ -26,7 +26,55 @@ templates = Jinja2Templates(directory="templates")
 SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
 EXPIRE_MINUTES = 120
 MAX_ITEMS = 10
+STATE_FILE = "app_state.json"
 serializer = URLSafeTimedSerializer(SECRET_KEY, salt="telegram-control-center")
+
+
+def default_state():
+    return {
+        "api_id": None,
+        "api_hash": "",
+        "auto_reply_rules": [],
+        "broadcast_presets": []
+    }
+
+
+def load_json_file(path):
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+            return data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def load_state():
+    state = default_state()
+    saved = load_json_file(STATE_FILE)
+    state.update({key: saved.get(key, value) for key, value in state.items()})
+    return state
+
+
+def save_state():
+    temp_path = f"{STATE_FILE}.tmp"
+    with open(temp_path, "w", encoding="utf-8") as file:
+        json.dump(state, file, ensure_ascii=False, indent=2)
+    os.replace(temp_path, STATE_FILE)
+
+
+def load_config():
+    return load_json_file("config.json")
+
+
+state = load_state()
+config = load_config()
+api_id_value = os.getenv("API_ID") or state.get("api_id") or config.get("api_id")
+API_ID = int(api_id_value) if api_id_value else None
+API_HASH = os.getenv("API_HASH") or state.get("api_hash") or config.get("api_hash") or ""
+TELEGRAM_READY = bool(API_ID and API_HASH)
+auth_data = {}
+telegram = None
+telegram_lock = asyncio.Lock()
 
 
 def create_token():
@@ -46,41 +94,141 @@ def verify_token(request: Request):
         raise HTTPException(status_code=401)
 
 
-def load_config():
-    try:
-        with open("config.json", "r", encoding="utf-8") as file:
-            return json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+def format_error(error):
+    message = str(error).strip()
+    return message or "The request could not be completed. Please try again."
 
 
-config = load_config()
-api_id_value = os.getenv("API_ID") or config.get("api_id")
-API_ID = int(api_id_value) if api_id_value else None
-API_HASH = os.getenv("API_HASH") or config.get("api_hash")
-TELEGRAM_READY = bool(API_ID and API_HASH)
+def with_notice(path, status, message):
+    return f"{path}?{urlencode({'status': status, 'message': message})}"
 
-keywords = []
-chat_settings = {"groups": [], "private": []}
-broadcast_message = "Hello"
-auth_data = {}
-telegram = None
-telegram_lock = asyncio.Lock()
 
-if TELEGRAM_READY:
-    telegram = Client(
-        "my_account",
-        api_id=API_ID,
-        api_hash=API_HASH,
-        in_memory=True
+def redirect_with_notice(status, message):
+    return RedirectResponse(with_notice("/", status, message), status_code=303)
+
+
+def login_notice_redirect(status, message):
+    return RedirectResponse(with_notice("/login", status, message), status_code=303)
+
+
+def is_https_request(request: Request):
+    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+
+
+def dashboard_redirect(request: Request):
+    token = create_token()
+    response = RedirectResponse(with_notice("/", "success", "تم تسجيل الدخول بنجاح."), status_code=303)
+    response.set_cookie(
+        "token",
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=is_https_request(request),
+        max_age=EXPIRE_MINUTES * 60
     )
+    return response
+
+
+def parse_chat_value(value):
+    chat_id, chat_type, chat_name = value.split("|", 2)
+    return {"id": int(chat_id), "type": chat_type or "private", "name": chat_name or "دردشة بدون اسم"}
+
+
+def unique_chats(chats):
+    seen = set()
+    result = []
+    for chat in chats:
+        try:
+            chat_id = int(chat.get("id"))
+        except Exception:
+            continue
+        if chat_id in seen:
+            continue
+        seen.add(chat_id)
+        result.append({
+            "id": chat_id,
+            "type": chat.get("type") or "private",
+            "name": chat.get("name") or "دردشة بدون اسم"
+        })
+    return result[:100]
+
+
+def collect_saved_chats():
+    chats = []
+    for rule in state.get("auto_reply_rules", []):
+        chats.extend(rule.get("chats", []))
+    for preset in state.get("broadcast_presets", []):
+        chats.extend(preset.get("chats", []))
+    return unique_chats(chats)
+
+
+def selected_chat_ids(chats):
+    ids = []
+    for chat in chats:
+        try:
+            ids.append(int(chat.get("id")))
+        except Exception:
+            continue
+    return ids
+
+
+def find_auto_reply(text, chat_id):
+    lowered = text.lower()
+    for rule in state.get("auto_reply_rules", []):
+        keyword = (rule.get("keyword") or "").strip().lower()
+        reply = (rule.get("reply") or "").strip()
+        target_ids = selected_chat_ids(rule.get("chats", []))
+        if keyword and reply and keyword in lowered and (not target_ids or chat_id in target_ids):
+            return reply
+    return None
+
+
+def attach_telegram_handlers(client):
+    @client.on_message(filters.text)
+    async def handler(_, message):
+        try:
+            if not message.text:
+                return
+            reply = find_auto_reply(message.text, message.chat.id)
+            if reply:
+                await message.reply(reply)
+        except Exception:
+            return
+
+
+def build_telegram_client(api_id, api_hash):
+    if not api_id or not api_hash:
+        return None
+    client = Client("my_account", api_id=int(api_id), api_hash=api_hash, in_memory=True)
+    attach_telegram_handlers(client)
+    return client
+
+
+telegram = build_telegram_client(API_ID, API_HASH)
+
+
+async def configure_telegram_client(api_id, api_hash):
+    global API_ID, API_HASH, TELEGRAM_READY, telegram
+
+    async with telegram_lock:
+        if telegram is not None and getattr(telegram, "is_connected", False):
+            try:
+                await telegram.disconnect()
+            except Exception:
+                pass
+
+        API_ID = int(api_id)
+        API_HASH = api_hash
+        TELEGRAM_READY = bool(API_ID and API_HASH)
+        telegram = build_telegram_client(API_ID, API_HASH)
+        auth_data.clear()
 
 
 def telegram_required():
     if telegram is None:
         raise HTTPException(
             status_code=503,
-            detail="Telegram API credentials are not configured."
+            detail="بيانات Telegram API غير محفوظة بعد. أدخل API ID و API Hash أولاً."
         )
 
 
@@ -111,84 +259,25 @@ async def ensure_telegram_initialized():
             raise
 
 
-def format_error(error):
-    message = str(error).strip()
-    return message or "The request could not be completed. Please try again."
-
-
-def with_notice(path, status, message):
-    return f"{path}?{urlencode({'status': status, 'message': message})}"
-
-
-def redirect_with_notice(status, message):
-    return RedirectResponse(with_notice("/", status, message), status_code=303)
-
-
 def login_response(request: Request, step: str, error: str | None = None, success: str | None = None, status_code: int = 200):
+    status = request.query_params.get("status")
+    message = request.query_params.get("message")
     return templates.TemplateResponse(
         request=request,
         name="login.html",
         context={
             "step": step,
             "telegram_ready": TELEGRAM_READY,
+            "api_id": API_ID,
             "error": error,
-            "success": success
+            "success": success,
+            "notice": {
+                "status": status,
+                "message": message
+            } if status and message else None
         },
         status_code=status_code
     )
-
-
-def is_https_request(request: Request):
-    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
-
-
-def dashboard_redirect(request: Request):
-    token = create_token()
-    response = RedirectResponse(with_notice("/", "success", "You are signed in successfully."), status_code=303)
-    response.set_cookie(
-        "token",
-        token,
-        httponly=True,
-        samesite="lax",
-        secure=is_https_request(request),
-        max_age=EXPIRE_MINUTES * 60
-    )
-    return response
-
-
-def match_keyword(text: str):
-    return any(k.lower() in text for k in keywords)
-
-
-if telegram is not None:
-    @telegram.on_message(filters.text)
-    async def handler(_, message):
-        try:
-            if not message.text:
-                return
-
-            if not match_keyword(message.text.lower()):
-                return
-
-            chat_id = message.chat.id
-            reply_type = "default"
-
-            for group in chat_settings["groups"]:
-                if group["id"] == chat_id:
-                    reply_type = "group"
-
-            for private_chat in chat_settings["private"]:
-                if private_chat["id"] == chat_id:
-                    reply_type = "private"
-
-            if reply_type == "group":
-                await message.reply("Group auto reply is active for this chat.")
-            elif reply_type == "private":
-                await message.reply("Private auto reply is active for this chat.")
-            else:
-                await message.reply("Default auto reply is active.")
-        except Exception:
-            return
 
 
 @app.get("/login")
@@ -201,30 +290,48 @@ async def favicon():
     return Response(status_code=204)
 
 
+@app.post("/setup_api")
+async def setup_api(request: Request, api_id: str = Form(...), api_hash: str = Form(...)):
+    if TELEGRAM_READY:
+        verify_token(request)
+
+    clean_id = api_id.strip()
+    clean_hash = api_hash.strip()
+
+    if not clean_id.isdigit() or not clean_hash:
+        return login_response(request, "phone", "أدخل API ID رقمي و API Hash صحيح.", status_code=200)
+
+    state["api_id"] = int(clean_id)
+    state["api_hash"] = clean_hash
+    save_state()
+    await configure_telegram_client(state["api_id"], state["api_hash"])
+    return login_notice_redirect("success", "تم حفظ بيانات Telegram API. يمكنك الآن تسجيل الدخول برقم الهاتف.")
+
+
 @app.post("/send_code")
 async def send_code(request: Request, phone: str = Form(...)):
     if telegram is None:
         return login_response(
             request,
             "phone",
-            "Telegram API credentials are not configured. Add API_ID and API_HASH before signing in.",
+            "أدخل API ID و API Hash قبل تسجيل الدخول.",
             status_code=503
         )
 
     try:
         clean_phone = phone.strip()
         if not clean_phone:
-            return login_response(request, "phone", "Enter a phone number with the country code.")
+            return login_response(request, "phone", "أدخل رقم الهاتف مع رمز الدولة.")
 
         await ensure_telegram_connected()
         sent = await telegram.send_code(clean_phone)
         auth_data["phone"] = clean_phone
         auth_data["hash"] = sent.phone_code_hash
-        return login_response(request, "code", success="Verification code sent successfully.")
+        return login_response(request, "code", success="تم إرسال رمز التحقق بنجاح.")
     except PhoneNumberInvalid:
-        return login_response(request, "phone", "Invalid phone number. Use the international format, for example +966...")
+        return login_response(request, "phone", "رقم الهاتف غير صحيح. استخدم الصيغة الدولية مثل +966...")
     except FloodWait as error:
-        return login_response(request, "phone", f"Telegram rate limit reached. Try again in {error.value} seconds.")
+        return login_response(request, "phone", f"يوجد حد مؤقت من Telegram. حاول بعد {error.value} ثانية.")
     except Exception as error:
         return login_response(request, "phone", format_error(error), status_code=200)
 
@@ -234,12 +341,12 @@ async def verify(request: Request, code: str = Form(...)):
     try:
         clean_code = code.strip()
         if not clean_code:
-            return login_response(request, "code", "Enter the verification code.")
+            return login_response(request, "code", "أدخل رمز التحقق.")
 
         await ensure_telegram_connected()
 
         if not auth_data.get("phone") or not auth_data.get("hash"):
-            return login_response(request, "phone", "Start by sending the verification code to your phone number.")
+            return login_response(request, "phone", "ابدأ بإرسال رمز التحقق إلى رقم الهاتف.")
 
         await telegram.sign_in(
             auth_data["phone"],
@@ -250,14 +357,14 @@ async def verify(request: Request, code: str = Form(...)):
         await ensure_telegram_initialized()
         return dashboard_redirect(request)
     except SessionPasswordNeeded:
-        return login_response(request, "password", "This account requires a two-step verification password.")
+        return login_response(request, "password", "هذا الحساب يتطلب كلمة مرور التحقق بخطوتين.")
     except PhoneCodeInvalid:
-        return login_response(request, "code", "The verification code is incorrect.")
+        return login_response(request, "code", "رمز التحقق غير صحيح.")
     except PhoneCodeExpired:
         auth_data.clear()
-        return login_response(request, "phone", "The verification code expired. Send a new code.")
+        return login_response(request, "phone", "انتهت صلاحية رمز التحقق. أرسل رمزاً جديداً.")
     except FloodWait as error:
-        return login_response(request, "code", f"Telegram rate limit reached. Try again in {error.value} seconds.")
+        return login_response(request, "code", f"يوجد حد مؤقت من Telegram. حاول بعد {error.value} ثانية.")
     except Exception as error:
         return login_response(request, "code", format_error(error), status_code=200)
 
@@ -267,14 +374,14 @@ async def verify_password(request: Request, password: str = Form(...)):
     try:
         clean_password = password.strip()
         if not clean_password:
-            return login_response(request, "password", "Enter your two-step verification password.")
+            return login_response(request, "password", "أدخل كلمة مرور التحقق بخطوتين.")
 
         await ensure_telegram_connected()
         await telegram.check_password(clean_password)
         await ensure_telegram_initialized()
         return dashboard_redirect(request)
     except FloodWait as error:
-        return login_response(request, "password", f"Telegram rate limit reached. Try again in {error.value} seconds.")
+        return login_response(request, "password", f"يوجد حد مؤقت من Telegram. حاول بعد {error.value} ثانية.")
     except Exception as error:
         return login_response(request, "password", format_error(error), status_code=200)
 
@@ -293,7 +400,9 @@ async def dashboard(request: Request):
     except HTTPException:
         return RedirectResponse("/login", status_code=303)
 
-    selected_chats = chat_settings["groups"] + chat_settings["private"]
+    auto_reply_rules = state.get("auto_reply_rules", [])[:MAX_ITEMS]
+    broadcast_presets = state.get("broadcast_presets", [])[:MAX_ITEMS]
+    saved_chats = collect_saved_chats()
     status = request.query_params.get("status")
     message = request.query_params.get("message")
 
@@ -301,16 +410,16 @@ async def dashboard(request: Request):
         request=request,
         name="index.html",
         context={
-            "keywords": keywords,
-            "chat_settings": chat_settings,
-            "broadcast_message": broadcast_message,
-            "selected_chats": selected_chats,
+            "api_id": API_ID,
             "telegram_ready": TELEGRAM_READY,
+            "auto_reply_rules": auto_reply_rules,
+            "broadcast_presets": broadcast_presets,
+            "available_chats": saved_chats,
             "stats": {
-                "keywords": len(keywords),
-                "groups": len(chat_settings["groups"]),
-                "private": len(chat_settings["private"]),
-                "total_chats": len(selected_chats)
+                "rules": len(auto_reply_rules),
+                "presets": len(broadcast_presets),
+                "saved_chats": len(saved_chats),
+                "telegram": "جاهز" if TELEGRAM_READY else "غير مكتمل"
             },
             "notice": {
                 "status": status,
@@ -335,100 +444,137 @@ async def load_chats(request: Request):
 
             chats.append({
                 "id": chat.id,
-                "name": chat.title or chat.first_name or "Private Chat",
+                "name": chat.title or chat.first_name or "دردشة خاصة",
                 "type": chat_type
             })
 
-            if len(chats) >= 50:
+            if len(chats) >= 100:
                 break
 
-        return {"ok": True, "chats": chats, "message": f"Loaded {len(chats)} chats successfully."}
+        return {"ok": True, "chats": unique_chats(chats + collect_saved_chats()), "message": f"تم تحميل {len(chats)} دردشة بنجاح."}
     except HTTPException as error:
         return JSONResponse({"ok": False, "chats": [], "message": error.detail}, status_code=200)
     except FloodWait as error:
-        return JSONResponse({"ok": False, "chats": [], "message": f"Telegram rate limit reached. Try again in {error.value} seconds."}, status_code=200)
+        return JSONResponse({"ok": False, "chats": [], "message": f"يوجد حد مؤقت من Telegram. حاول بعد {error.value} ثانية."}, status_code=200)
     except Exception as error:
         return JSONResponse({"ok": False, "chats": [], "message": format_error(error)}, status_code=200)
 
 
-@app.post("/keywords")
-async def save_keywords(request: Request, keywords_form: list[str] = Form(default=[], alias="keywords")):
-    global keywords
+@app.post("/dashboard_api")
+async def dashboard_api(request: Request, api_id: str = Form(...), api_hash: str = Form(...)):
     verify_token(request)
+    clean_id = api_id.strip()
+    clean_hash = api_hash.strip()
 
-    cleaned = []
-    for keyword in keywords_form:
-        value = keyword.strip()
-        if value and value.lower() not in [item.lower() for item in cleaned]:
-            cleaned.append(value)
+    if not clean_id.isdigit() or not clean_hash:
+        return redirect_with_notice("error", "أدخل API ID رقمي و API Hash صحيح.")
 
-    keywords = cleaned[:MAX_ITEMS]
-    return redirect_with_notice("success", f"Saved {len(keywords)} keyword rules.")
+    state["api_id"] = int(clean_id)
+    state["api_hash"] = clean_hash
+    save_state()
+    await configure_telegram_client(state["api_id"], state["api_hash"])
+    return redirect_with_notice("success", "تم تحديث بيانات Telegram API.")
 
 
-@app.post("/save_chats")
-async def save_chats(request: Request, selected_chats: list[str] = Form(default=[])):
+@app.post("/auto_replies")
+async def save_auto_replies(request: Request):
     verify_token(request)
+    form = await request.form()
+    keywords = form.getlist("rule_keyword")
+    replies = form.getlist("rule_reply")
+    rules = []
 
-    groups = []
-    privates = []
-    skipped = 0
+    for index, keyword in enumerate(keywords[:MAX_ITEMS]):
+        clean_keyword = keyword.strip()
+        clean_reply = replies[index].strip() if index < len(replies) else ""
+        chats = []
+        for raw_chat in form.getlist(f"rule_chats_{index}"):
+            try:
+                chats.append(parse_chat_value(raw_chat))
+            except Exception:
+                continue
 
-    for item in selected_chats[:MAX_ITEMS]:
-        try:
-            chat_id, chat_type, chat_name = item.split("|", 2)
-            record = {"id": int(chat_id), "name": chat_name or "Unnamed chat", "type": chat_type}
+        if clean_keyword and clean_reply:
+            rules.append({
+                "keyword": clean_keyword,
+                "reply": clean_reply,
+                "chats": unique_chats(chats)[:MAX_ITEMS]
+            })
 
-            if chat_type == "group":
-                groups.append(record)
-            else:
-                privates.append(record)
-        except Exception:
-            skipped += 1
-
-    chat_settings["groups"] = groups
-    chat_settings["private"] = privates
-
-    if skipped:
-        return redirect_with_notice("warning", f"Saved {len(groups) + len(privates)} chats. {skipped} invalid selections were skipped.")
-
-    return redirect_with_notice("success", f"Saved {len(groups) + len(privates)} selected chats.")
+    state["auto_reply_rules"] = rules[:MAX_ITEMS]
+    save_state()
+    return redirect_with_notice("success", f"تم حفظ {len(state['auto_reply_rules'])} قاعدة رد تلقائي.")
 
 
-@app.post("/broadcast")
-async def broadcast(request: Request, message: str = Form(...)):
-    global broadcast_message
+@app.post("/broadcast_presets")
+async def save_broadcast_presets(request: Request):
     verify_token(request)
+    form = await request.form()
+    titles = form.getlist("preset_title")
+    messages = form.getlist("preset_message")
+    presets = []
 
-    broadcast_message = message.strip()
-    if not broadcast_message:
-        return redirect_with_notice("error", "Broadcast message cannot be empty.")
+    for index, title in enumerate(titles[:MAX_ITEMS]):
+        clean_title = title.strip() or f"بث رقم {index + 1}"
+        clean_message = messages[index].strip() if index < len(messages) else ""
+        chats = []
+        for raw_chat in form.getlist(f"preset_chats_{index}"):
+            try:
+                chats.append(parse_chat_value(raw_chat))
+            except Exception:
+                continue
 
-    targets = (chat_settings["groups"] + chat_settings["private"])[:MAX_ITEMS]
+        if clean_message:
+            presets.append({
+                "title": clean_title,
+                "message": clean_message,
+                "chats": unique_chats(chats)[:MAX_ITEMS]
+            })
+
+    state["broadcast_presets"] = presets[:MAX_ITEMS]
+    save_state()
+    return redirect_with_notice("success", f"تم حفظ {len(state['broadcast_presets'])} قالب بث.")
+
+
+@app.post("/broadcast_preset/{preset_index}")
+async def broadcast_preset(request: Request, preset_index: int):
+    verify_token(request)
+    presets = state.get("broadcast_presets", [])
+
+    if preset_index < 0 or preset_index >= len(presets):
+        return redirect_with_notice("error", "قالب البث غير موجود.")
+
+    preset = presets[preset_index]
+    message = (preset.get("message") or "").strip()
+    targets = unique_chats(preset.get("chats", []))[:MAX_ITEMS]
+
+    if not message:
+        return redirect_with_notice("error", "رسالة البث فارغة.")
+
     if not targets:
-        return redirect_with_notice("warning", "No chats are selected. Load chats and save at least one target before broadcasting.")
+        return redirect_with_notice("warning", "اختر دردشة واحدة على الأقل لهذا البث قبل الإرسال.")
 
     try:
         await ensure_telegram_initialized()
     except Exception as error:
-        return redirect_with_notice("error", f"Broadcast was not sent because Telegram is not ready: {format_error(error)}")
+        return redirect_with_notice("error", f"لم يتم إرسال البث لأن Telegram غير جاهز: {format_error(error)}")
 
     sent = 0
     failed = []
 
     for target in targets:
         try:
-            await telegram.send_message(target["id"], broadcast_message)
+            await telegram.send_message(target["id"], message)
             sent += 1
         except FloodWait as error:
-            failed.append(f"{target.get('name', target['id'])}: rate limited for {error.value} seconds")
+            failed.append(f"{target.get('name', target['id'])}: انتظر {error.value} ثانية")
         except Exception as error:
             failed.append(f"{target.get('name', target['id'])}: {format_error(error)}")
 
     if failed and sent:
-        return redirect_with_notice("warning", f"Sent to {sent} chats. Failed for {len(failed)} chats: {'; '.join(failed[:3])}")
+        return redirect_with_notice("warning", f"تم الإرسال إلى {sent} دردشة، وفشل {len(failed)}: {'; '.join(failed[:3])}")
 
     if failed:
-        return redirect_with_notice("error", f"Broadcast failed for all selected chats: {'; '.join(failed[:3])}")
+        return redirect_with_notice("error", f"فشل إرسال البث: {'; '.join(failed[:3])}")
 
-    return redirect_with_notice("success", f"Broadcast sent successfully to {sent} chats.")
+    return redirect_with_notice("success", f"تم إرسال البث إلى {sent} دردشة بنجاح.")
