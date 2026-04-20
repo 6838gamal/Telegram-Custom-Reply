@@ -1,5 +1,11 @@
+#pyrogram
+#tgcrypto
+#streamlit
+#flask
+#gunicorn
+
+fastapi
+uvicorn
 pyrogram
 tgcrypto
-#streamlit
-flask
-gunicorn
+jinja2
