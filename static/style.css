@@ -1,0 +1,70 @@
+body {
+    font-family: Tahoma;
+    background: #f4f6f9;
+    margin: 0;
+}
+
+.container {
+    width: 90%;
+    max-width: 800px;
+    margin: auto;
+}
+
+h1 {
+    text-align: center;
+    color: #007BFF;
+}
+
+.card {
+    background: white;
+    padding: 20px;
+    margin-top: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px #ddd;
+}
+
+.row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+input, select {
+    flex: 1;
+    padding: 8px;
+}
+
+.actions {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+}
+
+.btn {
+    padding: 8px 12px;
+    border: none;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.success {
+    background: green;
+    color: white;
+}
+
+.danger {
+    background: red;
+    color: white;
+}
+
+.info {
+    background: #17a2b8;
+    color: white;
+}
+
+.status {
+    text-align: center;
+    font-weight: bold;
+    color: green;
+}
+
