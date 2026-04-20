@@ -8,37 +8,36 @@ from starlette.middleware.sessions import SessionMiddleware
 from pyrogram import Client, filters
 
 # ------------------------------
-# APP SETUP
+# APP
 # ------------------------------
 app = FastAPI()
-
-# 🔥 مهم جداً لتخزين تسجيل الدخول
 app.add_middleware(SessionMiddleware, secret_key="super-secret-key")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-bot_status = "⏳ Starting..."
 MAX_ITEMS = 10
+bot_status = "⏳ Starting..."
 
 # ------------------------------
-# ENV CONFIG ONLY
+# ENV ONLY
 # ------------------------------
-API_ID = os.getenv("API_ID")
+API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
-
-if not API_ID or not API_HASH:
-    raise Exception("API_ID and API_HASH are required")
-
-API_ID = int(API_ID)
 
 # ------------------------------
 # MEMORY STORAGE
 # ------------------------------
 keywords = []
-allowed_groups = []
-private_chats = []
-broadcast_message = "Hello"
+
+chat_settings = {
+    "groups": [],     # {"id": -100, "reply_type": "group"}
+    "private": []     # {"id": 123, "reply_type": "private"}
+}
+
+broadcast_message = "Hello from bot"
+
+auth = {}
 
 # ------------------------------
 # TELEGRAM CLIENT
@@ -50,16 +49,14 @@ telegram = Client(
     in_memory=True
 )
 
-auth = {}
-
 # ------------------------------
-# KEYWORD MATCH
+# KEYWORD CHECK
 # ------------------------------
 def match_keyword(text: str):
     return any(k.lower() in text for k in keywords)
 
 # ------------------------------
-# MESSAGE HANDLER
+# AUTO REPLY LOGIC
 # ------------------------------
 @telegram.on_message(filters.text)
 async def handler(_, message):
@@ -69,22 +66,38 @@ async def handler(_, message):
     if not match_keyword(message.text.lower()):
         return
 
-    await message.reply("✅ Auto Reply Triggered")
+    chat_id = message.chat.id
+
+    # default reply
+    reply_type = "default"
+
+    for g in chat_settings["groups"]:
+        if g["id"] == chat_id:
+            reply_type = g.get("reply_type", "group")
+
+    for p in chat_settings["private"]:
+        if p["id"] == chat_id:
+            reply_type = p.get("reply_type", "private")
+
+    if reply_type == "group":
+        await message.reply("📢 Group Auto Reply")
+
+    elif reply_type == "private":
+        await message.reply("💬 Private Auto Reply")
+
+    else:
+        await message.reply("✅ Default Reply")
 
 # ------------------------------
-# LOGIN PAGE
+# LOGIN
 # ------------------------------
 @app.get("/login")
 async def login(request: Request):
     return templates.TemplateResponse(
-        request=request,
-        name="login.html",
-        context={"step": "phone"}
+        "login.html",
+        {"request": request, "step": "phone"}
     )
 
-# ------------------------------
-# SEND CODE
-# ------------------------------
 @app.post("/send_code")
 async def send_code(request: Request, phone: str = Form(...)):
     await telegram.connect()
@@ -95,14 +108,10 @@ async def send_code(request: Request, phone: str = Form(...)):
     auth["hash"] = sent.phone_code_hash
 
     return templates.TemplateResponse(
-        request=request,
-        name="login.html",
-        context={"step": "code"}
+        "login.html",
+        {"request": request, "step": "code"}
     )
 
-# ------------------------------
-# VERIFY CODE (FIXED)
-# ------------------------------
 @app.post("/verify")
 async def verify(request: Request, code: str = Form(...)):
     try:
@@ -112,59 +121,50 @@ async def verify(request: Request, code: str = Form(...)):
             code
         )
 
-        # 🔥 SESSION FIX (IMPORTANT)
         request.session["auth"] = True
-
-        async def run_bot():
-            await telegram.idle()
-
-        asyncio.create_task(run_bot())
+        asyncio.create_task(telegram.idle())
 
         return RedirectResponse("/", status_code=303)
 
     except Exception as e:
         return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context={"step": "code", "error": str(e)}
+            "login.html",
+            {"request": request, "step": "code", "error": str(e)}
         )
 
 # ------------------------------
-# DASHBOARD (FIXED)
+# DASHBOARD
 # ------------------------------
 @app.get("/")
 async def dashboard(request: Request):
-
-    # 🔥 SESSION CHECK (FIX)
     if not request.session.get("auth"):
         return RedirectResponse("/login")
 
     return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={
+        "index.html",
+        {
+            "request": request,
             "status": bot_status,
             "keywords": keywords,
-            "groups": allowed_groups,
-            "private_chats": private_chats,
+            "chat_settings": chat_settings,
             "broadcast_message": broadcast_message
         }
     )
 
 # ------------------------------
-# LOAD CHATS
+# LOAD TELEGRAM CHATS
 # ------------------------------
 @app.get("/load_chats")
 async def load_chats():
     chats = []
 
-    async for dialog in telegram.get_dialogs():
-        chat = dialog.chat
+    async for d in telegram.get_dialogs():
+        c = d.chat
 
         chats.append({
-            "id": chat.id,
-            "name": chat.title or chat.first_name or "Private",
-            "type": str(chat.type)
+            "id": c.id,
+            "name": c.title or c.first_name or "Private",
+            "type": str(c.type)
         })
 
         if len(chats) >= 50:
@@ -173,30 +173,38 @@ async def load_chats():
     return {"chats": chats}
 
 # ------------------------------
-# SAVE CHATS
+# SAVE CHATS WITH TYPE + RULE
 # ------------------------------
 @app.post("/save_chats")
-async def save_chats(selected: list[str] = Form(...)):
-    global allowed_groups, private_chats
+async def save_chats(
+    selected: list[str] = Form(...),
+    types: list[str] = Form(...),
+    reply_types: list[str] = Form(...)
+):
 
     groups = []
     privates = []
 
-    for cid in selected[:MAX_ITEMS]:
-        cid = int(cid)
+    for i in range(len(selected[:MAX_ITEMS])):
+        cid = int(selected[i])
 
-        if cid < 0:
-            groups.append({"id": cid})
+        item = {
+            "id": cid,
+            "reply_type": reply_types[i] if i < len(reply_types) else "default"
+        }
+
+        if types[i] == "group":
+            groups.append(item)
         else:
-            privates.append(cid)
+            privates.append(item)
 
-    allowed_groups = groups
-    private_chats = privates
+    chat_settings["groups"] = groups
+    chat_settings["private"] = privates
 
     return RedirectResponse("/", status_code=303)
 
 # ------------------------------
-# KEYWORDS
+# KEYWORDS CRUD
 # ------------------------------
 @app.post("/keywords")
 async def update_keywords(keywords_form: list[str] = Form(default=[])):
@@ -207,7 +215,7 @@ async def update_keywords(keywords_form: list[str] = Form(default=[])):
     return RedirectResponse("/", status_code=303)
 
 # ------------------------------
-# BROADCAST
+# BROADCAST MESSAGE
 # ------------------------------
 @app.post("/broadcast")
 async def broadcast(message: str = Form(...)):
@@ -215,7 +223,7 @@ async def broadcast(message: str = Form(...)):
 
     broadcast_message = message
 
-    targets = allowed_groups + [{"id": x} for x in private_chats]
+    targets = chat_settings["groups"] + chat_settings["private"]
 
     for t in targets[:MAX_ITEMS]:
         try:
@@ -224,10 +232,3 @@ async def broadcast(message: str = Form(...)):
             pass
 
     return RedirectResponse("/", status_code=303)
-
-# ------------------------------
-# STARTUP
-# ------------------------------
-@app.on_event("startup")
-async def startup():
-    pass
