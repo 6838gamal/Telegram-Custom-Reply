@@ -13,11 +13,12 @@ Python FastAPI web dashboard for Telegram custom auto-replies. The main app is s
 ## Current Features
 - English left-to-right login and dashboard UI.
 - API setup screen for first-time Telegram configuration.
-- Dashboard API settings section.
+- Dashboard layout with a left sidebar that switches between Overview, Auto Replies, Broadcasts, and API Settings sections.
+- Each functional section (Auto Replies and Broadcasts) has its own dedicated chat-loading button and chat list, while sharing the same backend chat data.
 - Auto-reply rules: up to 10 saved rules, each with a keyword/phrase, custom reply message, and selected chats.
 - Broadcast presets: up to 10 saved broadcast configurations, each with a title, message, and selected chats, with a send action for saved presets.
 - Telegram chat loading populates reusable chat choices for auto-replies and broadcast presets.
-- Layout is responsive for small mobile screens.
+- Mobile-friendly responsive layout: sidebar collapses into a slide-in drawer with a hamburger toggle and backdrop on small screens.
 
 ## Security Notes
 - Dashboard actions that read Telegram chats, save rules, save broadcast presets, update API settings, or send broadcasts require the signed-in cookie.

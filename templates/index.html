@@ -8,15 +8,53 @@
 </head>
 <body class="dashboard-page">
 
-<header class="topbar">
+<div class="app-shell" id="appShell">
+
+<aside class="sidebar" id="sidebar" aria-label="Primary navigation">
+<div class="sidebar-brand">
+<div class="brand-mark sm">TG</div>
 <div>
-<p class="eyebrow">Telegram Custom Reply</p>
-<h1>Dashboard</h1>
+<p class="eyebrow">Telegram</p>
+<strong>Control Center</strong>
 </div>
-<nav class="top-actions">
-<span class="status-pill {{ 'online' if telegram_ready else 'offline' }}">{{ 'Telegram ready' if telegram_ready else 'Setup incomplete' }}</span>
-<a class="btn ghost" href="/logout">Log out</a>
+</div>
+
+<nav class="sidebar-nav" id="sidebarNav">
+<button type="button" class="nav-item active" data-section="overview">
+<span class="nav-icon">▦</span><span>Overview</span>
+</button>
+<button type="button" class="nav-item" data-section="replies">
+<span class="nav-icon">↩</span><span>Auto Replies</span>
+</button>
+<button type="button" class="nav-item" data-section="broadcasts">
+<span class="nav-icon">📣</span><span>Broadcasts</span>
+</button>
+<button type="button" class="nav-item" data-section="settings">
+<span class="nav-icon">⚙</span><span>API Settings</span>
+</button>
 </nav>
+
+<div class="sidebar-footer">
+<span class="status-pill {{ 'online' if telegram_ready else 'offline' }}">{{ 'Telegram ready' if telegram_ready else 'Setup incomplete' }}</span>
+<a class="btn ghost block" href="/logout">Log out</a>
+</div>
+</aside>
+
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+<div class="dashboard-main">
+
+<header class="topbar">
+<button type="button" class="icon-btn menu-toggle" id="menuToggle" aria-label="Toggle menu" aria-controls="sidebar" aria-expanded="false">
+<span></span><span></span><span></span>
+</button>
+<div class="topbar-title">
+<p class="eyebrow">Telegram Custom Reply</p>
+<h1 id="sectionTitle">Overview</h1>
+</div>
+<div class="top-actions">
+<span class="status-pill {{ 'online' if telegram_ready else 'offline' }}">{{ 'Telegram ready' if telegram_ready else 'Setup incomplete' }}</span>
+</div>
 </header>
 
 <main class="dashboard-shell">
@@ -24,59 +62,53 @@
 <div class="alert {{ notice.status }}">{{ notice.message }}</div>
 {% endif %}
 
-<section class="stats-grid">
-<div class="stat-card">
-<span>Auto-reply rules</span>
-<strong>{{ stats.rules }}</strong>
+<section class="view-section active" id="section-overview" data-title="Overview">
+<div class="stats-grid">
+<div class="stat-card"><span>Auto-reply rules</span><strong>{{ stats.rules }}</strong></div>
+<div class="stat-card"><span>Broadcast presets</span><strong>{{ stats.presets }}</strong></div>
+<div class="stat-card"><span>Saved chats</span><strong>{{ stats.saved_chats }}</strong></div>
+<div class="stat-card"><span>Telegram status</span><strong class="text-small">{{ stats.telegram }}</strong></div>
 </div>
-<div class="stat-card">
-<span>Broadcast presets</span>
-<strong>{{ stats.presets }}</strong>
-</div>
-<div class="stat-card">
-<span>Saved chats</span>
-<strong>{{ stats.saved_chats }}</strong>
-</div>
-<div class="stat-card">
-<span>Telegram status</span>
-<strong class="text-small">{{ stats.telegram }}</strong>
-</div>
-</section>
 
 <section class="panel">
 <div class="panel-header">
 <div>
-<h2>API Settings</h2>
-<p>Update API ID and API Hash here when needed. The API Hash is not displayed after it is saved.</p>
+<h2>Quick actions</h2>
+<p>Jump straight into what you want to manage.</p>
 </div>
 </div>
-<form method="post" action="/dashboard_api" class="settings-grid">
-<div class="field">
-<label for="api_id">API ID</label>
-<input id="api_id" name="api_id" inputmode="numeric" value="{{ api_id or '' }}" required>
+<div class="quick-grid">
+<button type="button" class="quick-card" data-jump="replies">
+<strong>Auto Replies</strong>
+<span>Create or edit keyword-triggered reply rules.</span>
+</button>
+<button type="button" class="quick-card" data-jump="broadcasts">
+<strong>Broadcasts</strong>
+<span>Save preset messages and send to selected chats.</span>
+</button>
+<button type="button" class="quick-card" data-jump="settings">
+<strong>API Settings</strong>
+<span>Update API ID and API Hash for the Telegram client.</span>
+</button>
 </div>
-<div class="field">
-<label for="api_hash">API Hash</label>
-<input id="api_hash" name="api_hash" placeholder="Enter API Hash to save or update" autocomplete="off" required>
-</div>
-<button class="btn secondary align-end" type="submit">Update API Credentials</button>
-</form>
+</section>
 </section>
 
+<section class="view-section" id="section-replies" data-title="Auto Replies">
 <section class="panel">
 <div class="panel-header">
 <div>
-<h2>Chats</h2>
-<p>Load Telegram chats, then use them in auto-reply rules or broadcast presets.</p>
+<h2>Auto-reply chats</h2>
+<p>Load Telegram chats for this section, then attach them to any rule below.</p>
 </div>
-<button class="btn secondary" type="button" onclick="loadChats()">Load Telegram Chats</button>
+<button class="btn secondary" type="button" data-load-chats="rule">Load Chats</button>
 </div>
-<div id="chatNotice"></div>
-<div id="chatBox" class="chat-list empty-state">
+<div data-chat-notice="rule"></div>
+<div class="chat-list empty-state" data-chat-box="rule">
 {% if available_chats %}
-Found {{ available_chats|length }} saved chats. You can load Telegram chats to refresh this list.
+{{ available_chats|length }} saved chats are reusable here. Click “Load Chats” to refresh from Telegram.
 {% else %}
-Click “Load Telegram Chats” to fetch available chats.
+Click “Load Chats” to fetch available chats from Telegram.
 {% endif %}
 </div>
 </section>
@@ -84,8 +116,8 @@ Click “Load Telegram Chats” to fetch available chats.
 <section class="panel">
 <div class="panel-header">
 <div>
-<h2>Auto Replies</h2>
-<p>Create up to 10 rules. Each rule contains a keyword or phrase, the reply message, and the relevant chats.</p>
+<h2>Auto-reply rules</h2>
+<p>Up to 10 rules. Each rule has a keyword/phrase, a custom reply, and the chats it applies to.</p>
 </div>
 <button class="btn secondary" type="button" onclick="addRule()">Add Rule</button>
 </div>
@@ -95,7 +127,7 @@ Click “Load Telegram Chats” to fetch available chats.
 {% for rule in auto_reply_rules %}
 <div class="config-card rule-card" data-kind="rule">
 <div class="card-topline">
-<strong>Auto-reply Rule</strong>
+<strong>Auto-reply Rule #{{ loop.index }}</strong>
 <button class="btn danger" type="button" onclick="removeCard(this, 'rule')">Delete</button>
 </div>
 <div class="field">
@@ -116,7 +148,7 @@ Click “Load Telegram Chats” to fetch available chats.
 {% else %}
 <div class="config-card rule-card" data-kind="rule">
 <div class="card-topline">
-<strong>Auto-reply Rule</strong>
+<strong>Auto-reply Rule #1</strong>
 <button class="btn danger" type="button" onclick="removeCard(this, 'rule')">Delete</button>
 </div>
 <div class="field">
@@ -138,12 +170,32 @@ Click “Load Telegram Chats” to fetch available chats.
 <button class="btn primary" type="submit">Save Auto-reply Rules</button>
 </form>
 </section>
+</section>
+
+<section class="view-section" id="section-broadcasts" data-title="Broadcasts">
+<section class="panel">
+<div class="panel-header">
+<div>
+<h2>Broadcast chats</h2>
+<p>Load Telegram chats for the broadcast section, then assign them to any preset below.</p>
+</div>
+<button class="btn secondary" type="button" data-load-chats="preset">Load Chats</button>
+</div>
+<div data-chat-notice="preset"></div>
+<div class="chat-list empty-state" data-chat-box="preset">
+{% if available_chats %}
+{{ available_chats|length }} saved chats are reusable here. Click “Load Chats” to refresh from Telegram.
+{% else %}
+Click “Load Chats” to fetch available chats from Telegram.
+{% endif %}
+</div>
+</section>
 
 <section class="panel">
 <div class="panel-header">
 <div>
-<h2>Broadcasts</h2>
-<p>Save up to 10 broadcast presets. Each preset has a title, message, and selected chats so you can return to it later.</p>
+<h2>Broadcast presets</h2>
+<p>Save up to 10 presets. Each preset has a title, a message, and the chats to send it to.</p>
 </div>
 <button class="btn secondary" type="button" onclick="addPreset()">Add Broadcast</button>
 </div>
@@ -153,7 +205,7 @@ Click “Load Telegram Chats” to fetch available chats.
 {% for preset in broadcast_presets %}
 <div class="config-card preset-card" data-kind="preset">
 <div class="card-topline">
-<strong>Broadcast Preset</strong>
+<strong>Broadcast Preset #{{ loop.index }}</strong>
 <div class="inline-actions">
 <button class="btn danger" type="button" onclick="removeCard(this, 'preset')">Delete</button>
 </div>
@@ -175,7 +227,7 @@ Click “Load Telegram Chats” to fetch available chats.
 {% else %}
 <div class="config-card preset-card" data-kind="preset">
 <div class="card-topline">
-<strong>Broadcast Preset</strong>
+<strong>Broadcast Preset #1</strong>
 <button class="btn danger" type="button" onclick="removeCard(this, 'preset')">Delete</button>
 </div>
 <div class="field">
@@ -211,15 +263,36 @@ Click “Load Telegram Chats” to fetch available chats.
 </div>
 {% endif %}
 </section>
+</section>
+
+<section class="view-section" id="section-settings" data-title="API Settings">
+<section class="panel">
+<div class="panel-header">
+<div>
+<h2>API credentials</h2>
+<p>Update API ID and API Hash here when needed. The API Hash is not displayed after it is saved.</p>
+</div>
+</div>
+<form method="post" action="/dashboard_api" class="settings-grid">
+<div class="field">
+<label for="api_id">API ID</label>
+<input id="api_id" name="api_id" inputmode="numeric" value="{{ api_id or '' }}" required>
+</div>
+<div class="field">
+<label for="api_hash">API Hash</label>
+<input id="api_hash" name="api_hash" placeholder="Enter API Hash to save or update" autocomplete="off" required>
+</div>
+<button class="btn secondary align-end" type="submit">Update API Credentials</button>
+</form>
+</section>
+</section>
+
 </main>
+</div>
+</div>
 
 <script>
 let availableChats = {{ available_chats|tojson }};
-
-function showChatNotice(type, message){
-    const notice = document.getElementById("chatNotice");
-    notice.innerHTML = `<div class="alert ${type}">${message}</div>`;
-}
 
 function escapeHtml(value){
     return String(value)
@@ -234,13 +307,18 @@ function chatValue(chat){
     return `${chat.id}|${chat.type || "private"}|${chat.name || "Unnamed chat"}`;
 }
 
+function showChatNotice(scope, type, message){
+    const notice = document.querySelector(`[data-chat-notice="${scope}"]`);
+    if(notice) notice.innerHTML = `<div class="alert ${type}">${message}</div>`;
+}
+
 function renderTargetOptions(){
     document.querySelectorAll(".target-options").forEach((target) => {
         const selected = new Set(JSON.parse(target.dataset.selected || "[]").map(String));
         const name = target.dataset.targetName;
 
         if(!availableChats.length){
-            target.innerHTML = '<div class="empty-state compact">No saved chats yet. Load chats from the section above first.</div>';
+            target.innerHTML = '<div class="empty-state compact">No saved chats yet. Use the “Load Chats” button above first.</div>';
             return;
         }
 
@@ -256,14 +334,33 @@ function renderTargetOptions(){
     });
 }
 
+function renderChatBoxes(){
+    document.querySelectorAll("[data-chat-box]").forEach((box) => {
+        if(!availableChats.length){
+            box.className = "chat-list empty-state";
+            box.innerHTML = "Click “Load Chats” to fetch available chats from Telegram.";
+            return;
+        }
+        box.className = "chat-list";
+        box.innerHTML = availableChats.map((chat) => {
+            const safeName = escapeHtml(chat.name || "Unnamed chat");
+            const safeType = escapeHtml(chat.type || "private");
+            return `<div class="chat-row"><span><strong>${safeName}</strong><small>${safeType} • ${escapeHtml(chat.id)}</small></span></div>`;
+        }).join("");
+    });
+}
+
 function syncIndexes(kind){
     const selector = kind === "rule" ? ".rule-card" : ".preset-card";
     const prefix = kind === "rule" ? "rule_chats" : "preset_chats";
+    const titlePrefix = kind === "rule" ? "Auto-reply Rule" : "Broadcast Preset";
     document.querySelectorAll(selector).forEach((card, index) => {
         const target = card.querySelector(".target-options");
         const checked = Array.from(target.querySelectorAll("input:checked")).map((input) => input.value.split("|")[0]);
         target.dataset.targetName = `${prefix}_${index}`;
         target.dataset.selected = JSON.stringify(checked);
+        const heading = card.querySelector(".card-topline strong");
+        if(heading) heading.textContent = `${titlePrefix} #${index + 1}`;
     });
     renderTargetOptions();
 }
@@ -289,7 +386,7 @@ function addRule(){
     const card = document.createElement("div");
     card.className = "config-card rule-card";
     card.dataset.kind = "rule";
-    card.innerHTML = `<div class="card-topline"><strong>Auto-reply Rule</strong><button class="btn danger" type="button" onclick="removeCard(this, 'rule')">Delete</button></div>
+    card.innerHTML = `<div class="card-topline"><strong>Auto-reply Rule #${index + 1}</strong><button class="btn danger" type="button" onclick="removeCard(this, 'rule')">Delete</button></div>
         <div class="field"><label>Keyword or phrase</label><input name="rule_keyword" placeholder="Example: I need help" required></div>
         <div class="field"><label>Reply message</label><textarea name="rule_reply" rows="3" placeholder="Write the reply that will be sent when the keyword appears" required></textarea></div>
         <div class="field"><label>Relevant chats</label><div class="target-options" data-target-name="rule_chats_${index}" data-selected="[]"></div><p class="hint">If you do not select any chats, the rule can apply to all available chats for the account.</p></div>`;
@@ -307,7 +404,7 @@ function addPreset(){
     const card = document.createElement("div");
     card.className = "config-card preset-card";
     card.dataset.kind = "preset";
-    card.innerHTML = `<div class="card-topline"><strong>Broadcast Preset</strong><button class="btn danger" type="button" onclick="removeCard(this, 'preset')">Delete</button></div>
+    card.innerHTML = `<div class="card-topline"><strong>Broadcast Preset #${index + 1}</strong><button class="btn danger" type="button" onclick="removeCard(this, 'preset')">Delete</button></div>
         <div class="field"><label>Preset title</label><input name="preset_title" placeholder="Example: Follow-up message"></div>
         <div class="field"><label>Broadcast message</label><textarea name="preset_message" rows="4" placeholder="Write the broadcast message" required></textarea></div>
         <div class="field"><label>Chats</label><div class="target-options" data-target-name="preset_chats_${index}" data-selected="[]"></div></div>`;
@@ -315,47 +412,93 @@ function addPreset(){
     renderTargetOptions();
 }
 
-async function loadChats(){
-    const box = document.getElementById("chatBox");
-    box.className = "chat-list empty-state";
-    box.innerHTML = "Loading chats...";
-    showChatNotice("warning", "Connecting to Telegram and loading chats...");
+async function loadChats(scope, button){
+    const box = document.querySelector(`[data-chat-box="${scope}"]`);
+    if(box){ box.className = "chat-list empty-state"; box.innerHTML = "Loading chats..."; }
+    if(button){ button.disabled = true; button.dataset.label = button.textContent; button.textContent = "Loading..."; }
+    showChatNotice(scope, "warning", "Connecting to Telegram and loading chats...");
 
     try{
         const res = await fetch("/load_chats");
         const data = await res.json();
 
         if(!data.ok){
-            box.innerHTML = "No chats were loaded.";
-            showChatNotice("error", escapeHtml(data.message || "Unable to load chats."));
+            if(box) box.innerHTML = "No chats were loaded.";
+            showChatNotice(scope, "error", escapeHtml(data.message || "Unable to load chats."));
             return;
         }
 
         availableChats = data.chats || [];
+        renderChatBoxes();
+        renderTargetOptions();
 
         if(!availableChats.length){
-            box.innerHTML = "No chats were found in this account.";
-            showChatNotice("warning", "Connected successfully, but Telegram did not return any chats.");
-            renderTargetOptions();
+            showChatNotice(scope, "warning", "Connected successfully, but Telegram did not return any chats.");
             return;
         }
-
-        box.className = "chat-list";
-        box.innerHTML = availableChats.map((chat) => {
-            const safeName = escapeHtml(chat.name || "Unnamed chat");
-            const safeType = escapeHtml(chat.type || "private");
-            return `<div class="chat-row"><span><strong>${safeName}</strong><small>${safeType} • ${escapeHtml(chat.id)}</small></span></div>`;
-        }).join("");
-
-        renderTargetOptions();
-        showChatNotice("success", escapeHtml(data.message || "Chats loaded successfully."));
+        showChatNotice(scope, "success", escapeHtml(data.message || "Chats loaded successfully."));
     }catch(error){
-        box.innerHTML = "No chats were loaded.";
-        showChatNotice("error", `Unable to load chats: ${escapeHtml(error.message)}`);
+        if(box) box.innerHTML = "No chats were loaded.";
+        showChatNotice(scope, "error", `Unable to load chats: ${escapeHtml(error.message)}`);
+    }finally{
+        if(button){ button.disabled = false; button.textContent = button.dataset.label || "Load Chats"; }
     }
 }
 
+const sections = document.querySelectorAll(".view-section");
+const navItems = document.querySelectorAll(".nav-item");
+const sectionTitle = document.getElementById("sectionTitle");
+const sidebar = document.getElementById("sidebar");
+const backdrop = document.getElementById("sidebarBackdrop");
+const menuToggle = document.getElementById("menuToggle");
+
+function activateSection(name){
+    let matched = false;
+    sections.forEach((section) => {
+        const isMatch = section.id === `section-${name}`;
+        section.classList.toggle("active", isMatch);
+        if(isMatch){
+            matched = true;
+            sectionTitle.textContent = section.dataset.title || name;
+        }
+    });
+    if(!matched) return;
+    navItems.forEach((item) => item.classList.toggle("active", item.dataset.section === name));
+    closeSidebar();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function openSidebar(){
+    sidebar.classList.add("open");
+    backdrop.classList.add("show");
+    menuToggle.setAttribute("aria-expanded", "true");
+}
+function closeSidebar(){
+    sidebar.classList.remove("open");
+    backdrop.classList.remove("show");
+    menuToggle.setAttribute("aria-expanded", "false");
+}
+
+navItems.forEach((item) => {
+    item.addEventListener("click", () => activateSection(item.dataset.section));
+});
+
+document.querySelectorAll("[data-jump]").forEach((el) => {
+    el.addEventListener("click", () => activateSection(el.dataset.jump));
+});
+
+document.querySelectorAll("[data-load-chats]").forEach((btn) => {
+    btn.addEventListener("click", () => loadChats(btn.dataset.loadChats, btn));
+});
+
+menuToggle.addEventListener("click", () => {
+    if(sidebar.classList.contains("open")) closeSidebar(); else openSidebar();
+});
+backdrop.addEventListener("click", closeSidebar);
+window.addEventListener("resize", () => { if(window.innerWidth > 900) closeSidebar(); });
+
 renderTargetOptions();
+renderChatBoxes();
 </script>
 
 </body>
